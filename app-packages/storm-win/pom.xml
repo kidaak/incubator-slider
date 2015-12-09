@@ -19,15 +19,21 @@
 -->
   <parent>
 <<<<<<< HEAD
+<<<<<<< HEAD
     <groupId>org.apache.slider</groupId>
     <artifactId>slider</artifactId>
     <version>0.60.0-incubating</version>
     <relativePath>../../pom.xml</relativePath>
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
     <groupId>org.apache.slider.packages</groupId>
     <artifactId>slider-app-packages</artifactId>
     <version>0.90.0-incubating-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
   </parent>
   <modelVersion>4.0.0</modelVersion>

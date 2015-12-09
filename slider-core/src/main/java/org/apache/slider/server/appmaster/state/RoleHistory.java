@@ -915,7 +915,11 @@ public class RoleHistory {
       available = false;
     } else {
 <<<<<<< HEAD
+<<<<<<< HEAD
       available = nodeEntry.containerCompleted(wasReleased);
+=======
+      available = nodeEntry.containerCompleted(wasReleased, outcome);
+>>>>>>> refs/remotes/apache/develop
 =======
       available = nodeEntry.containerCompleted(wasReleased, outcome);
 >>>>>>> refs/remotes/apache/develop

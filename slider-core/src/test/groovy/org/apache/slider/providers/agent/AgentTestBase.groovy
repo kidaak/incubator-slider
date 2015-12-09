@@ -55,7 +55,11 @@ public abstract class AgentTestBase extends YarnZKMiniClusterTestBase {
   public static void assumeValidServerEnv() {
     try {
 <<<<<<< HEAD
+<<<<<<< HEAD
       SliderUtils.validateSliderServerEnvironment(log, true)
+=======
+      SliderUtils.validateSliderServerEnvironment(log as Logger, true)
+>>>>>>> refs/remotes/apache/develop
 =======
       SliderUtils.validateSliderServerEnvironment(log as Logger, true)
 >>>>>>> refs/remotes/apache/develop

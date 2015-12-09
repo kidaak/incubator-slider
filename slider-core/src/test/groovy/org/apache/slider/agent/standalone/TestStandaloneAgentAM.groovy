@@ -52,11 +52,14 @@ class TestStandaloneAgentAM  extends AgentMiniClusterTestBase {
   void fixclientname() {
     sliderClientClassName = DEFAULT_SLIDER_CLIENT
   }
+<<<<<<< HEAD
   
   @After
   void fixclientname() {
     sliderClientClassName = DEFAULT_SLIDER_CLIENT
   }
+=======
+>>>>>>> refs/remotes/apache/develop
   
   @Test
   public void testStandaloneAgentAM() throws Throwable {
@@ -75,8 +78,13 @@ class TestStandaloneAgentAM  extends AgentMiniClusterTestBase {
     ApplicationReport report = waitForClusterLive(client)
     URI uri = new URI(report.originalTrackingUrl)
 <<<<<<< HEAD
+<<<<<<< HEAD
     assert uri.port in [60000, 60001, 60002, 60003]
     assert report.rpcPort in [60000, 60001, 60002, 60003]
+=======
+    assert uri.port in 60000..60010
+    assert report.rpcPort in 60000..60010
+>>>>>>> refs/remotes/apache/develop
 =======
     assert uri.port in 60000..60010
     assert report.rpcPort in 60000..60010
@@ -204,7 +212,13 @@ class TestStandaloneAgentAM  extends AgentMiniClusterTestBase {
 
     // destroy it
 <<<<<<< HEAD
+<<<<<<< HEAD
     client.actionDestroy(newcluster)
+=======
+    ActionDestroyArgs args = new ActionDestroyArgs()
+    args.force = true;
+    client.actionDestroy(newcluster, args)
+>>>>>>> refs/remotes/apache/develop
 =======
     ActionDestroyArgs args = new ActionDestroyArgs()
     args.force = true;
@@ -223,7 +237,11 @@ class TestStandaloneAgentAM  extends AgentMiniClusterTestBase {
       AggregateConf conf = builder.instanceDescription
       conf.appConfOperations.
 <<<<<<< HEAD
+<<<<<<< HEAD
           globalOptions[SliderKeys.KEY_ALLOWED_PORT_RANGE]= "60000-60003"
+=======
+          globalOptions[SliderKeys.KEY_ALLOWED_PORT_RANGE]= PORT_RANGE
+>>>>>>> refs/remotes/apache/develop
 =======
           globalOptions[SliderKeys.KEY_ALLOWED_PORT_RANGE]= PORT_RANGE
 >>>>>>> refs/remotes/apache/develop
@@ -238,7 +256,11 @@ class TestStandaloneAgentAM  extends AgentMiniClusterTestBase {
     throws YarnException, IOException {
       instanceDefinition.appConfOperations.
 <<<<<<< HEAD
+<<<<<<< HEAD
           globalOptions[SliderKeys.KEY_ALLOWED_PORT_RANGE] ="60000-60003"
+=======
+          globalOptions[SliderKeys.KEY_ALLOWED_PORT_RANGE] =PORT_RANGE
+>>>>>>> refs/remotes/apache/develop
 =======
           globalOptions[SliderKeys.KEY_ALLOWED_PORT_RANGE] =PORT_RANGE
 >>>>>>> refs/remotes/apache/develop

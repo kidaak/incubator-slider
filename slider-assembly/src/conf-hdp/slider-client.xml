@@ -38,12 +38,18 @@
 
     <property>
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
       <name>yarn.log-aggregation-enable</name>
       <value>true</value>
     </property>
 
     <property>
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
         <name>slider.security.protocol.acl</name>
       <value>*</value>

@@ -144,7 +144,10 @@ public interface SliderXmlConfKeys {
    */
   String PYTHON_EXECUTABLE_PATH = "agent.python.exec.path";
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
 
   /**
    * Flag to enable the insecure AM filter: {@value}
@@ -205,5 +208,8 @@ public interface SliderXmlConfKeys {
   String DFS_NAMENODE_DU_RESERVED_KEY = "dfs.namenode.resource.du.reserved";
 
 
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
 }

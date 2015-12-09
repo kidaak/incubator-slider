@@ -123,7 +123,11 @@ class TestWindowsSupport extends YarnMiniClusterTestBase {
   @Test
   public void testExecNonexistentBinary() throws Throwable {
 <<<<<<< HEAD
+<<<<<<< HEAD
     assume(Shell.WINDOWS, "not windows")
+=======
+    assumeWindows()
+>>>>>>> refs/remotes/apache/develop
 =======
     assumeWindows()
 >>>>>>> refs/remotes/apache/develop
@@ -141,11 +145,15 @@ class TestWindowsSupport extends YarnMiniClusterTestBase {
   public void testExecNonexistentBinary2() throws Throwable {
     assumeWindows()
 <<<<<<< HEAD
+<<<<<<< HEAD
     assert !doesWindowsAppExist(["undefined-application", "--version"])
   }
 
   public assumeWindows() {
     assume(Shell.WINDOWS, "not windows")
+=======
+    assert !doesAppExist(["undefined-application", "--version"])
+>>>>>>> refs/remotes/apache/develop
 =======
     assert !doesAppExist(["undefined-application", "--version"])
 >>>>>>> refs/remotes/apache/develop
@@ -203,6 +211,7 @@ class TestWindowsSupport extends YarnMiniClusterTestBase {
     assert exepath
     log.info "Hadoop DLL at: $exepath"
 <<<<<<< HEAD
+<<<<<<< HEAD
   }
 
   public File locateExecutable(String exe) {
@@ -236,4 +245,8 @@ class TestWindowsSupport extends YarnMiniClusterTestBase {
 >>>>>>> refs/remotes/apache/develop
   }
 
+=======
+  }
+
+>>>>>>> refs/remotes/apache/develop
 }

@@ -69,6 +69,10 @@ import org.apache.slider.core.exceptions.SliderException;
 import org.apache.slider.core.launch.ClasspathConstructor;
 import org.apache.slider.core.main.LauncherExitCodes;
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+import org.apache.slider.providers.agent.AgentKeys;
+>>>>>>> refs/remotes/apache/develop
 =======
 import org.apache.slider.providers.agent.AgentKeys;
 >>>>>>> refs/remotes/apache/develop
@@ -2044,15 +2048,21 @@ public final class SliderUtils {
     }
     try {
 <<<<<<< HEAD
+<<<<<<< HEAD
       String path = Shell.getQualifiedBinPath("winutils.exe");
       log.debug("winutils is at {}", path);
     } catch (IOException e) {
       errorText.append("No WINUTILS.EXE. ");
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
       String path = Shell.getQualifiedBinPath(WINUTILS);
       log.debug("winutils is at {}", path);
     } catch (IOException e) {
       errorText.append("No " + WINUTILS);
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
       log.warn("No winutils: {}", e, e);
     }

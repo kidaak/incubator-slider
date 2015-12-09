@@ -23,6 +23,7 @@
 <configuration>
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   <!--
      The recommended approach is to configure slider-env.sh and set HADOOP_CONF_DIR.
      Otherwise, appropriate configurations from hdfs-site, yarn-site, can be dropped in this file
@@ -53,6 +54,14 @@
       <description>This is just for diagnostics</description>
     </property>
 
+=======
+    <property>
+      <name>slider.client.resource.origin</name>
+      <value>conf/slider-client.xml</value>
+      <description>This is just for diagnostics</description>
+    </property>
+
+>>>>>>> refs/remotes/apache/develop
     <property>
       <name>slider.security.protocol.acl</name>
       <value>*</value>
@@ -89,6 +98,9 @@
     <property>
       <name>yarn.log-aggregation-enable</name>
       <value>true</value>
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
     </property>
 

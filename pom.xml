@@ -20,7 +20,11 @@
   <artifactId>slider</artifactId>
   <name>Slider</name>
 <<<<<<< HEAD
+<<<<<<< HEAD
   <version>0.60.0-incubating</version>
+=======
+  <version>0.90.0-incubating-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/develop
 =======
   <version>0.90.0-incubating-SNAPSHOT</version>
 >>>>>>> refs/remotes/apache/develop
@@ -170,6 +174,10 @@
     <jaxb-api.version>2.2.7</jaxb-api.version>
     <jsp.version>2.1</jsp.version>
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+    <jsch.version>0.1.51</jsch.version>
+>>>>>>> refs/remotes/apache/develop
 =======
     <jsch.version>0.1.51</jsch.version>
 >>>>>>> refs/remotes/apache/develop
@@ -1441,13 +1449,19 @@
       </dependency>
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
       <dependency>
         <groupId>asm</groupId>
         <artifactId>asm</artifactId>
         <version>3.3.1</version>
       </dependency>
 
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
     </dependencies>
     
@@ -1456,6 +1470,7 @@
   <profiles>
 
     <profile>
+<<<<<<< HEAD
 <<<<<<< HEAD
       <id>Non-Windows</id>
       <activation>
@@ -1483,6 +1498,8 @@
       </modules>
     </profile>
     <profile>
+=======
+>>>>>>> refs/remotes/apache/develop
 =======
 >>>>>>> refs/remotes/apache/develop
       <id>rat</id>
@@ -1668,6 +1685,7 @@
       <properties>
         <hadoop.version>2.6.0-SNAPSHOT</hadoop.version>
 <<<<<<< HEAD
+<<<<<<< HEAD
       </properties>
     </profile>
 
@@ -1676,6 +1694,8 @@
       <id>release-2.6</id>
       <properties>
         <hadoop.version>2.6.0</hadoop.version>
+=======
+>>>>>>> refs/remotes/apache/develop
 =======
 >>>>>>> refs/remotes/apache/develop
       </properties>
@@ -1734,7 +1754,13 @@
       <id>branch-2</id>
       <properties>
 <<<<<<< HEAD
+<<<<<<< HEAD
         <hadoop.version>2.7.0-SNAPSHOT</hadoop.version>
+=======
+        <hadoop.version>2.9.0-SNAPSHOT</hadoop.version>
+        <curator.version>2.7.1</curator.version>
+        <zookeeper.version>3.4.6</zookeeper.version>
+>>>>>>> refs/remotes/apache/develop
 =======
         <hadoop.version>2.9.0-SNAPSHOT</hadoop.version>
         <curator.version>2.7.1</curator.version>
@@ -1773,6 +1799,7 @@
     </profile>
 
     <profile>
+<<<<<<< HEAD
       <!-- Java 8 build -->
       <id>java8</id>
       <properties>
@@ -1790,6 +1817,8 @@
     </profile>
 
     <profile>
+=======
+>>>>>>> refs/remotes/apache/develop
     <id>strict</id>
     <!--enable this if you want to get told off about dependency conflict-->
     <build>

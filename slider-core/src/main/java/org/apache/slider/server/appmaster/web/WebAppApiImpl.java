@@ -18,7 +18,10 @@ package org.apache.slider.server.appmaster.web;
 
 import org.apache.hadoop.registry.client.api.RegistryOperations;
 <<<<<<< HEAD
+<<<<<<< HEAD
 import org.apache.slider.api.SliderClusterProtocol;
+=======
+>>>>>>> refs/remotes/apache/develop
 =======
 >>>>>>> refs/remotes/apache/develop
 import org.apache.slider.providers.ProviderService;
@@ -46,7 +49,10 @@ public class WebAppApiImpl implements WebAppApi {
   private static final Logger log = LoggerFactory.getLogger(WebAppApiImpl.class);
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   protected final SliderClusterProtocol clusterProto;
+=======
+>>>>>>> refs/remotes/apache/develop
 =======
 >>>>>>> refs/remotes/apache/develop
   protected final StateAccessForProviders appState;

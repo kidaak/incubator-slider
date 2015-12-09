@@ -36,6 +36,7 @@ public interface SliderXMLConfKeysForTesting {
 
   int DEFAULT_TEST_TIMEOUT_SECONDS = 30 * 60;
 <<<<<<< HEAD
+<<<<<<< HEAD
 
   String KEY_TEST_HBASE_LAUNCH_TIME = "slider.test.hbase.launch.wait.seconds";
 
@@ -44,6 +45,8 @@ public interface SliderXMLConfKeysForTesting {
   String KEY_TEST_HBASE_ENABLED = "slider.test.hbase.enabled";
 
   String KEY_TEST_ACCUMULO_ENABLED = "slider.test.accumulo.enabled";
+=======
+>>>>>>> refs/remotes/apache/develop
 =======
 >>>>>>> refs/remotes/apache/develop
 

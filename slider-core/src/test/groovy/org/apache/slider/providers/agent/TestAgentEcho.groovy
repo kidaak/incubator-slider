@@ -27,6 +27,10 @@ import org.apache.slider.client.SliderClient
 import org.apache.slider.common.SliderExitCodes
 import org.apache.slider.common.SliderXmlConfKeys
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+import org.apache.slider.common.params.ActionNodesArgs
+>>>>>>> refs/remotes/apache/develop
 =======
 import org.apache.slider.common.params.ActionNodesArgs
 >>>>>>> refs/remotes/apache/develop
@@ -75,7 +79,11 @@ class TestAgentEcho extends AgentTestBase {
 
   @Test
 <<<<<<< HEAD
+<<<<<<< HEAD
   public void testEchoOperation() throws Throwable {
+=======
+  public void testAgentEcho() throws Throwable {
+>>>>>>> refs/remotes/apache/develop
 =======
   public void testAgentEcho() throws Throwable {
 >>>>>>> refs/remotes/apache/develop
@@ -107,7 +115,13 @@ class TestAgentEcho extends AgentTestBase {
             ARG_COMP_OPT, role, SERVICE_NAME, "Agent",
             ARG_DEFINE, 
 <<<<<<< HEAD
+<<<<<<< HEAD
             SliderXmlConfKeys.KEY_SLIDER_AM_DEPENDENCY_CHECKS_DISABLED + "=false" 
+=======
+            SliderXmlConfKeys.KEY_SLIDER_AM_DEPENDENCY_CHECKS_DISABLED + "=false",
+            ARG_COMP_OPT, role, TEST_RELAX_VERIFICATION, "true",
+
+>>>>>>> refs/remotes/apache/develop
 =======
             SliderXmlConfKeys.KEY_SLIDER_AM_DEPENDENCY_CHECKS_DISABLED + "=false",
             ARG_COMP_OPT, role, TEST_RELAX_VERIFICATION, "true",

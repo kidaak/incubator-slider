@@ -27,7 +27,13 @@ import org.apache.commons.lang.ArrayUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 <<<<<<< HEAD
+<<<<<<< HEAD
 import org.apache.hadoop.fs.FileSystem;
+=======
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.LocatedFileStatus;
+>>>>>>> refs/remotes/apache/develop
 =======
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -53,6 +59,10 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.alias.CredentialProvider;
 import org.apache.hadoop.security.alias.CredentialProviderFactory;
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+import org.apache.hadoop.util.Shell;
+>>>>>>> refs/remotes/apache/develop
 =======
 import org.apache.hadoop.util.Shell;
 >>>>>>> refs/remotes/apache/develop
@@ -375,11 +385,19 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
 
       case ACTION_DESTROY:
         exitCode = actionDestroy(clusterName, serviceArgs.getActionDestroyArgs());
+<<<<<<< HEAD
         break;
 
       case ACTION_DIAGNOSTICS:
         exitCode = actionDiagnostic(serviceArgs.getActionDiagnosticArgs());
         break;
+=======
+        break;
+
+      case ACTION_DIAGNOSTICS:
+        exitCode = actionDiagnostic(serviceArgs.getActionDiagnosticArgs());
+        break;
+>>>>>>> refs/remotes/apache/develop
       
       case ACTION_EXISTS:
         exitCode = actionExists(clusterName,
@@ -409,11 +427,19 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       
       case ACTION_INSTALL_PACKAGE:
         exitCode = actionInstallPkg(serviceArgs.getActionInstallPackageArgs());
+<<<<<<< HEAD
         break;
       
       case ACTION_KEYTAB:
         exitCode = actionKeytab(serviceArgs.getActionKeytabArgs());
         break;
+=======
+        break;
+      
+      case ACTION_KEYTAB:
+        exitCode = actionKeytab(serviceArgs.getActionKeytabArgs());
+        break;
+>>>>>>> refs/remotes/apache/develop
 
       case ACTION_LIST:
         exitCode = actionList(clusterName, serviceArgs.getActionListArgs());
@@ -433,6 +459,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
 
       case ACTION_REGISTRY:
         exitCode = actionRegistry(serviceArgs.getActionRegistryArgs());
+<<<<<<< HEAD
         break;
       
       case ACTION_RESOLVE:
@@ -447,6 +474,22 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
         exitCode = actionThaw(clusterName, serviceArgs.getActionThawArgs());
         break;
 
+=======
+        break;
+      
+      case ACTION_RESOLVE:
+        exitCode = actionResolve(serviceArgs.getActionResolveArgs());
+        break;
+      
+      case ACTION_STATUS:
+        exitCode = actionStatus(clusterName, serviceArgs.getActionStatusArgs());
+        break;
+
+      case ACTION_THAW:
+        exitCode = actionThaw(clusterName, serviceArgs.getActionThawArgs());
+        break;
+
+>>>>>>> refs/remotes/apache/develop
       case ACTION_UPDATE:
         exitCode = actionUpdate(clusterName, serviceArgs.getActionUpdateArgs());
         break;
@@ -633,16 +676,22 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     if (exists) {
       log.debug("Application Instance {} found at {}: destroying", clustername, clusterDirectory);
 <<<<<<< HEAD
+<<<<<<< HEAD
       boolean deleted =
           fs.delete(clusterDirectory, true);
       if (!deleted) {
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
       if (!forceDestroy) {
         // fail the command if --force is not explicitly specified
         throw new UsageException("Destroy will permanently delete directories and registries. "
             + "Reissue this command with the --force option if you want to proceed.");
       }
       if (!fs.delete(clusterDirectory, true)) {
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
         log.warn("Filesystem returned false from delete() operation");
       }
@@ -726,6 +775,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     return startCluster(clustername, createArgs);
   }
 
+<<<<<<< HEAD
 <<<<<<< HEAD
   private void checkForCredentials(Configuration conf,
       ConfTree tree) throws IOException {
@@ -851,6 +901,108 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
         }
         allContainersAndComponentsAccountedFor = false;
       }
+=======
+  @Override
+  public int actionUpgrade(String clustername, ActionUpgradeArgs upgradeArgs)
+      throws YarnException, IOException {
+    File template = upgradeArgs.template;
+    File resources = upgradeArgs.resources;
+    List<String> containers = upgradeArgs.containers;
+    List<String> components = upgradeArgs.components;
+
+    // For upgrade spec, let's be little more strict with validation. If either
+    // --template or --resources is specified, then both needs to be specified.
+    // Otherwise the internal app config and resources states of the app will be
+    // unwantedly modified and the change will take effect to the running app
+    // immediately.
+    require(!(template != null && resources == null),
+          "Option %s must be specified with option %s",
+          Arguments.ARG_RESOURCES, Arguments.ARG_TEMPLATE);
+
+    require(!(resources != null && template == null),
+          "Option %s must be specified with option %s",
+          Arguments.ARG_TEMPLATE, Arguments.ARG_RESOURCES);
+
+    // For upgrade spec, both --template and --resources should be specified
+    // and neither of --containers or --components should be used
+    if (template != null && resources != null) {
+      require(CollectionUtils.isEmpty(containers),
+            "Option %s cannot be specified with %s or %s",
+            Arguments.ARG_CONTAINERS, Arguments.ARG_TEMPLATE,
+            Arguments.ARG_RESOURCES);
+      require(CollectionUtils.isEmpty(components),
+              "Option %s cannot be specified with %s or %s",
+              Arguments.ARG_COMPONENTS, Arguments.ARG_TEMPLATE,
+              Arguments.ARG_RESOURCES);
+
+      // not an error to try to upgrade a stopped cluster, just return success
+      // code, appropriate log messages have already been dumped
+      if (!isAppInRunningState(clustername)) {
+        return EXIT_SUCCESS;
+      }
+
+      // Now initiate the upgrade spec flow
+      buildInstanceDefinition(clustername, upgradeArgs, true, true, true);
+      SliderClusterOperations clusterOperations = createClusterOperations(clustername);
+      clusterOperations.amSuicide("AM restarted for application upgrade", 1, 1000);
+      return EXIT_SUCCESS;
+    }
+
+    // Since neither --template or --resources were specified, it is upgrade
+    // containers flow. Here any one or both of --containers and --components
+    // can be specified. If a container is specified with --containers option
+    // and also belongs to a component type specified with --components, it will
+    // be upgraded only once.
+    return actionUpgradeContainers(clustername, upgradeArgs);
+  }
+
+  private int actionUpgradeContainers(String clustername,
+      ActionUpgradeArgs upgradeArgs) throws YarnException, IOException {
+    verifyBindingsDefined();
+    validateClusterName(clustername);
+    int waittime = upgradeArgs.getWaittime(); // ignored for now
+    String text = "Upgrade containers";
+    log.debug("actionUpgradeContainers({}, reason={}, wait={})", clustername,
+        text, waittime);
+
+    // not an error to try to upgrade a stopped cluster, just return success
+    // code, appropriate log messages have already been dumped
+    if (!isAppInRunningState(clustername)) {
+      return EXIT_SUCCESS;
+    }
+
+    // Create sets of containers and components to get rid of duplicates and
+    // for quick lookup during checks below
+    Set<String> containers = new HashSet<>();
+    if (upgradeArgs.containers != null) {
+      containers.addAll(new ArrayList<>(upgradeArgs.containers));
+    }
+    Set<String> components = new HashSet<>();
+    if (upgradeArgs.components != null) {
+      components.addAll(new ArrayList<>(upgradeArgs.components));
+    }
+
+    // check validity of component names and running containers here
+    List<ContainerInformation> liveContainers = getContainers(clustername);
+    Set<String> validContainers = new HashSet<>();
+    Set<String> validComponents = new HashSet<>();
+    for (ContainerInformation liveContainer : liveContainers) {
+      boolean allContainersAndComponentsAccountedFor = true;
+      if (CollectionUtils.isNotEmpty(containers)) {
+        if (containers.contains(liveContainer.containerId)) {
+          containers.remove(liveContainer.containerId);
+          validContainers.add(liveContainer.containerId);
+        }
+        allContainersAndComponentsAccountedFor = false;
+      }
+      if (CollectionUtils.isNotEmpty(components)) {
+        if (components.contains(liveContainer.component)) {
+          components.remove(liveContainer.component);
+          validComponents.add(liveContainer.component);
+        }
+        allContainersAndComponentsAccountedFor = false;
+      }
+>>>>>>> refs/remotes/apache/develop
       if (allContainersAndComponentsAccountedFor) {
         break;
       }
@@ -956,6 +1108,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
             Arrays.fill(pass, ' ');
           }
         }
+<<<<<<< HEAD
 >>>>>>> refs/remotes/apache/develop
       }
     } finally {
@@ -969,6 +1122,20 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     }
   }
 
+=======
+      }
+    } finally {
+      org.apache.hadoop.io.IOUtils.closeStream(br);
+    }
+  }
+
+  private static char[] readOnePassword(String alias) throws IOException {
+    try(BufferedReader br = new BufferedReader(new InputStreamReader(System.in))) {
+      return readPassword(alias, br);
+    }
+  }
+
+>>>>>>> refs/remotes/apache/develop
   // using a normal reader instead of a secure one,
   // because stdin is not hooked up to the command line
   private static char[] readPassword(String alias, BufferedReader br)
@@ -1110,6 +1277,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
               + CommonArgs.usage(serviceArgs, ACTION_INSTALL_PACKAGE));
     }
     Path srcFile = extractPackagePath(installPkgInfo.packageURI);
+<<<<<<< HEAD
 
     // Do not provide new options to install-package command as it is in
     // deprecated mode. So version is kept null here. Use package --install.
@@ -1118,6 +1286,16 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     FileSystem sfs = sliderFileSystem.getFileSystem();
     sfs.mkdirs(pkgPath);
 
+=======
+
+    // Do not provide new options to install-package command as it is in
+    // deprecated mode. So version is kept null here. Use package --install.
+    Path pkgPath = sliderFileSystem.buildPackageDirPath(installPkgInfo.name,
+        null);
+    FileSystem sfs = sliderFileSystem.getFileSystem();
+    sfs.mkdirs(pkgPath);
+
+>>>>>>> refs/remotes/apache/develop
     Path fileInFs = new Path(pkgPath, srcFile.getName());
     log.info("Installing package {} at {} and overwrite is {}.",
         srcFile, fileInFs, installPkgInfo.replacePkg);
@@ -1640,7 +1818,10 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     // make any substitutions needed at this stage
     replaceTokens(appConf.getConfTree(), getUsername(), clustername);
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
 
     // TODO: Refactor the validation code and persistence code
     try {
@@ -1652,6 +1833,9 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       throw new BadClusterStateException("Failed to save " + clustername
                                          + ": " + e);
     }
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
 
     // providers to validate what there is
@@ -1991,11 +2175,19 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
                                      confDir);
       }
 <<<<<<< HEAD
+<<<<<<< HEAD
       Path localConfDirPath = SliderUtils.createLocalPath(confDir);
       remoteConfPath = new Path(clusterDirectory, SliderKeys.SUBMITTED_CONF_DIR);
       log.debug("Slider configuration directory is {}; remote to be {}",
     		  localConfDirPath, remoteConfPath);
       SliderUtils.copyDirectory(config, localConfDirPath, remoteConfPath, null);
+=======
+      Path localConfDirPath = createLocalPath(confDir);
+      remoteConfPath = new Path(clusterDirectory, SliderKeys.SUBMITTED_CONF_DIR);
+      log.debug("Slider configuration directory is {}; remote to be {}", 
+          localConfDirPath, remoteConfPath);
+      copyDirectory(config, localConfDirPath, remoteConfPath, null);
+>>>>>>> refs/remotes/apache/develop
 =======
       Path localConfDirPath = createLocalPath(confDir);
       remoteConfPath = new Path(clusterDirectory, SliderKeys.SUBMITTED_CONF_DIR);
@@ -2226,6 +2418,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
   }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   private void propagatePythonExecutable(Configuration config,
                                          AggregateConf instanceDefinition) {
     String pythonExec = config.get(
@@ -2234,6 +2427,8 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       instanceDefinition.getAppConfOperations().getGlobalOptions().putIfUnset(
           SliderXmlConfKeys.PYTHON_EXECUTABLE_PATH,
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
   protected Map<String, String> getAmLaunchEnv(Configuration config) {
     String sliderAmLaunchEnv = config.get(KEY_AM_LAUNCH_ENV);
     log.debug("{} = {}", KEY_AM_LAUNCH_ENV, sliderAmLaunchEnv);
@@ -2295,6 +2490,9 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     if (pythonExec != null) {
       instanceDefinition.getAppConfOperations().getGlobalOptions().putIfUnset(
           PYTHON_EXECUTABLE_PATH,
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
           pythonExec);
     }

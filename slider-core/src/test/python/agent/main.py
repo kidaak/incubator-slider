@@ -27,7 +27,11 @@ import os
 
 def main():
 <<<<<<< HEAD
+<<<<<<< HEAD
   print "Executing echo"
+=======
+  print "Executing src/test/python/agent/main.py"
+>>>>>>> refs/remotes/apache/develop
 =======
   print "Executing src/test/python/agent/main.py"
 >>>>>>> refs/remotes/apache/develop

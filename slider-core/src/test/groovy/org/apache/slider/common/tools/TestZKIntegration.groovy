@@ -42,6 +42,10 @@ class TestZKIntegration extends YarnZKMiniClusterTestBase implements KeysForTest
   // as the static compiler doesn't resolve consistently
   public static final String USER = KeysForTests.USERNAME
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+  public static final int CONNECT_TIMEOUT = 5000
+>>>>>>> refs/remotes/apache/develop
 =======
   public static final int CONNECT_TIMEOUT = 5000
 >>>>>>> refs/remotes/apache/develop
@@ -66,7 +70,11 @@ class TestZKIntegration extends YarnZKMiniClusterTestBase implements KeysForTest
   public ZKIntegration initZKI() {
     zki = createZKIntegrationInstance(
 <<<<<<< HEAD
+<<<<<<< HEAD
         getZKBinding(), methodName.methodName, true, false, 5000)
+=======
+        getZKBinding(), methodName.methodName, true, false, CONNECT_TIMEOUT)
+>>>>>>> refs/remotes/apache/develop
 =======
         getZKBinding(), methodName.methodName, true, false, CONNECT_TIMEOUT)
 >>>>>>> refs/remotes/apache/develop
@@ -116,7 +124,11 @@ class TestZKIntegration extends YarnZKMiniClusterTestBase implements KeysForTest
     MockSliderClient client = new MockSliderClient()
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     String path = client.createZookeeperNode("cl1", true)
+=======
+    String path = client.createZookeeperNodeInner("cl1", true)
+>>>>>>> refs/remotes/apache/develop
 =======
     String path = client.createZookeeperNodeInner("cl1", true)
 >>>>>>> refs/remotes/apache/develop
@@ -158,7 +170,11 @@ class TestZKIntegration extends YarnZKMiniClusterTestBase implements KeysForTest
     @Override
     protected ZKIntegration getZkClient(String clusterName, String user) {
 <<<<<<< HEAD
+<<<<<<< HEAD
       zki = createZKIntegrationInstance(getZKBinding(), clusterName, true, false, 5000)
+=======
+      zki = createZKIntegrationInstance(getZKBinding(), clusterName, true, false, CONNECT_TIMEOUT)
+>>>>>>> refs/remotes/apache/develop
 =======
       zki = createZKIntegrationInstance(getZKBinding(), clusterName, true, false, CONNECT_TIMEOUT)
 >>>>>>> refs/remotes/apache/develop

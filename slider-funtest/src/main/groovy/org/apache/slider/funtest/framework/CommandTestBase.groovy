@@ -623,6 +623,7 @@ abstract class CommandTestBase extends SliderTestUtils {
 
   /**
 <<<<<<< HEAD
+<<<<<<< HEAD
    * Create a templated slider app.
    * <p>
    * If the extraArgs list does not contain a --wait parm then a wait 
@@ -639,6 +640,93 @@ abstract class CommandTestBase extends SliderTestUtils {
    * @param extraArgs list of extra arguments to the command
    * @param launchReportFile optional file to save the AM launch report to
 <<<<<<< HEAD
+=======
+   * @return the shell
+   */
+  public SliderShell createSliderApplicationMinPkg(
+      String name,
+      String metaInfo,
+      String resourceTemplate,
+      String appTemplate,
+      List<String> extraArgs = [],
+      File launchReportFile = null) {
+
+    if (!launchReportFile) {
+      launchReportFile = createTempJsonFile()
+    }
+    // delete any previous copy of the file
+    launchReportFile.delete();
+
+    List<String> commands = [
+        ACTION_CREATE, name,
+        ARG_METAINFO, metaInfo,
+        ARG_OUTPUT, launchReportFile.absolutePath
+    ]
+
+    if (StringUtils.isNotBlank(appTemplate)) {
+      commands << ARG_TEMPLATE << appTemplate
+    }
+    if (StringUtils.isNotBlank(resourceTemplate)) {
+      commands << ARG_RESOURCES << resourceTemplate
+    }
+    if (!extraArgs.contains(ARG_WAIT)) {
+      commands << ARG_WAIT << Integer.toString(THAW_WAIT_TIME)
+    }
+
+    maybeAddCommandOption(commands,
+        [ARG_COMP_OPT, SliderKeys.COMPONENT_AM, SliderXmlConfKeys.KEY_AM_LOGIN_KEYTAB_NAME],
+        SLIDER_CONFIG.getTrimmed(SliderXmlConfKeys.KEY_AM_LOGIN_KEYTAB_NAME));
+    maybeAddCommandOption(commands,
+        [ARG_COMP_OPT, SliderKeys.COMPONENT_AM, SliderXmlConfKeys.KEY_HDFS_KEYTAB_DIR],
+        SLIDER_CONFIG.getTrimmed(SliderXmlConfKeys.KEY_HDFS_KEYTAB_DIR));
+    maybeAddCommandOption(commands,
+        [ARG_COMP_OPT, SliderKeys.COMPONENT_AM, SliderXmlConfKeys.KEY_AM_KEYTAB_LOCAL_PATH],
+        SLIDER_CONFIG.getTrimmed(SliderXmlConfKeys.KEY_AM_KEYTAB_LOCAL_PATH));
+    maybeAddCommandOption(commands,
+        [ARG_COMP_OPT, SliderKeys.COMPONENT_AM, SliderXmlConfKeys.KEY_KEYTAB_PRINCIPAL],
+        SLIDER_CONFIG.getTrimmed(SliderXmlConfKeys.KEY_KEYTAB_PRINCIPAL));
+    commands.addAll(extraArgs)
+    SliderShell shell = new SliderShell(commands)
+    if (0 != shell.execute()) {
+      // app has failed.
+
+      // grab the app report of the last known instance of this app
+      // which may not be there if it was a config failure; may be out of date
+      // from a previous run
+      log.error("Launch failed with exit code ${shell.ret}")
+      shell.dumpOutput()
+
+      // now grab that app report if it is there
+      def appReport = maybeLookupFromLaunchReport(launchReportFile)
+      String extraText = ""
+      if (appReport) {
+        log.error("Application report:\n$appReport")
+        extraText = appReport.diagnostics
+      }
+
+      fail("Application Launch Failure, exit code  ${shell.ret}\n${extraText}")
+    }
+    return shell
+  }
+
+  /**
+   * Create a templated slider app.
+   * <p>
+   * If the extraArgs list does not contain a --wait parm then a wait 
+=======
+   * Create a slider app using the alternate packaging capability
+   * <p>
+   * If the extraArgs list does not contain a --wait parm then a wait
+>>>>>>> refs/remotes/apache/develop
+   * duration of THAW_WAIT_TIME will be added to the launch args.
+   * @param name name
+   * @param metaInfo application metaInfo
+   * @param appTemplate application template
+   * @param resourceTemplate resource template
+   * @param extraArgs list of extra arguments to the command
+   * @param launchReportFile optional file to save the AM launch report to
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
 =======
    * @return the shell
    */
@@ -782,6 +870,7 @@ abstract class CommandTestBase extends SliderTestUtils {
   }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   /**
    * Create a temp JSON file. After coming up with the name, the file
    * is deleted
@@ -800,6 +889,8 @@ abstract class CommandTestBase extends SliderTestUtils {
     return reportFile
   }
 
+=======
+>>>>>>> refs/remotes/apache/develop
 =======
 >>>>>>> refs/remotes/apache/develop
   /**
@@ -963,13 +1054,19 @@ abstract class CommandTestBase extends SliderTestUtils {
    * Spinning operation to perform a registry call
    * @param application application
 <<<<<<< HEAD
+<<<<<<< HEAD
    */
   protected void ensureRegistryCallSucceeds(String application) {
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
    * @param target target URL For diagnostics
    */
   protected void ensureRegistryCallSucceeds(String application, URL target) {
     def failureText = "Application registry is not accessible at $target after $REGISTRY_STARTUP_TIMEOUT ms"
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
     repeatUntilSuccess("registry",
         this.&isRegistryAccessible,
@@ -1012,7 +1109,10 @@ abstract class CommandTestBase extends SliderTestUtils {
 
   /**
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
    * Wait for an application to move out of a specific state. Don't fail this
    * test if the application is never found to move of the state. State
    * transitions sometimes happen so fast that short lived transient states
@@ -1039,6 +1139,9 @@ abstract class CommandTestBase extends SliderTestUtils {
   }
 
   /**
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
    * Is the registry accessible for an application?
    * @param args argument map containing <code>"application"</code>
@@ -1083,7 +1186,10 @@ abstract class CommandTestBase extends SliderTestUtils {
 
   /**
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
    * Probe for an application to be in a state other than the specified state;
    * uses <code>exists</code> operation
    * @param args argument map containing <code>"application"</code> and
@@ -1098,6 +1204,9 @@ abstract class CommandTestBase extends SliderTestUtils {
   }
 
   /**
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
    * is an application in a desired yarn state. Uses the <code>exists</code>
    * CLI operation
@@ -1118,6 +1227,7 @@ abstract class CommandTestBase extends SliderTestUtils {
    * @param args map where 'applicationId' must m
    * @return
    */
+<<<<<<< HEAD
 
   protected static Outcome isYarnApplicationRunning(Map<String, String> args) {
     String applicationId = args['applicationId'];
@@ -1132,6 +1242,22 @@ abstract class CommandTestBase extends SliderTestUtils {
    */
   protected static Outcome isYarnApplicationInExactState(Map<String, String> args) {
     String applicationId = args['applicationId'];
+=======
+
+  protected static Outcome isYarnApplicationRunning(Map<String, String> args) {
+    String applicationId = args['applicationId'];
+    return isYarnApplicationInState(applicationId,
+        YarnApplicationState.RUNNING, true)
+  }
+
+  /**
+   * Probe callback for is the the app running or not
+   * @param args map where 'applicationId' must m
+   * @return
+   */
+  protected static Outcome isYarnApplicationInExactState(Map<String, String> args) {
+    String applicationId = args['applicationId'];
+>>>>>>> refs/remotes/apache/develop
     String state = args['state']
     def desired = YarnApplicationState.valueOf(state)
     return isYarnApplicationInState(applicationId, desired, false)
@@ -1320,7 +1446,11 @@ abstract class CommandTestBase extends SliderTestUtils {
 
     repeatUntilSuccess(
 <<<<<<< HEAD
+<<<<<<< HEAD
         "await container count",
+=======
+        "await requested container count",
+>>>>>>> refs/remotes/apache/develop
 =======
         "await requested container count",
 >>>>>>> refs/remotes/apache/develop
@@ -1406,7 +1536,10 @@ abstract class CommandTestBase extends SliderTestUtils {
   }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
   public int queryFailedCount(String  application, String role) {
     ClusterDescription cd = execStatus(application)
     if (cd.statistics.size() == 0) {
@@ -1464,6 +1597,9 @@ abstract class CommandTestBase extends SliderTestUtils {
     }
   }
 
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
   /**
    * Spin for <code>REGISTRY_STARTUP_TIMEOUT</code> waiting
@@ -1498,14 +1634,20 @@ abstract class CommandTestBase extends SliderTestUtils {
     }
   }
 <<<<<<< HEAD
+<<<<<<< HEAD
   /**
    * Is the registry accessible for an application?
    * @param args argument map containing <code>"application"</code>
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
  
   /**
    * probe for the output {@code  command: List} containing {@code text}
    * @param args argument map containing the required parameters
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
    * @return probe outcome
    */
@@ -1516,14 +1658,20 @@ abstract class CommandTestBase extends SliderTestUtils {
     return Outcome.fromBool(shell.outputContains(text))
   }
 <<<<<<< HEAD
+<<<<<<< HEAD
   /**
    * Is the registry accessible for an application?
    * @param args argument map containing <code>"application"</code>
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
 
   /**
    * probe for a command {@code command: List} succeeeding
    * @param args argument map containing the required parameters
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
    * @return probe outcome
    */
@@ -1533,15 +1681,21 @@ abstract class CommandTestBase extends SliderTestUtils {
     return Outcome.fromBool(shell.ret == 0)
   }
 <<<<<<< HEAD
+<<<<<<< HEAD
   /**
    * Is the registry accessible for an application?
    * @param args argument map
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
 
   /**
    * probe for a command {@code command: List} generating a file 'filename'
    * which must contain the text 'text'
    * @param args argument map containing the required parameters
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
    * @return probe outcome
    */
@@ -1557,7 +1711,10 @@ abstract class CommandTestBase extends SliderTestUtils {
     return Outcome.fromBool(f.text.contains(text))
   }
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
 
   /**
    * Probe callback for is the the app root web page up.
@@ -1654,5 +1811,8 @@ abstract class CommandTestBase extends SliderTestUtils {
     }
   }
 
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
 }

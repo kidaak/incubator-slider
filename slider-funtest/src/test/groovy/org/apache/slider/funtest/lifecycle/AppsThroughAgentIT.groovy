@@ -90,6 +90,7 @@ implements FuntestProperties, Arguments, SliderExitCodes, SliderActions {
     log.info("Dumping data from AM Web URL");
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     ensureRegistryCallSucceeds(application)
     assertAppRunning(appId)
     def outfile = tmpFile(".txt")
@@ -101,10 +102,21 @@ implements FuntestProperties, Arguments, SliderExitCodes, SliderActions {
         RestPaths.SLIDER_PATH_PUBLISHER
             + "/" + RestPaths.SLIDER_EXPORTS)
 
+=======
+    def appmasterURL = amWebUrl.toURL()
+    log.info(appmasterURL.text);
+    URL registryExportsURL = new URL(appmasterURL,
+        RestPaths.SLIDER_PATH_PUBLISHER
+            + "/" + RestPaths.SLIDER_EXPORTS)
+
+>>>>>>> refs/remotes/apache/develop
     ensureRegistryCallSucceeds(application, registryExportsURL)
     assertAppRunning(appId)
     def outfile = tmpFile(".txt")
 
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
     def commands = [
         ACTION_REGISTRY,

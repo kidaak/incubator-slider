@@ -178,7 +178,12 @@ class TestBuildBasicAgent extends AgentTestBase {
     describe "build a cluster with the number of agents out of range"
     try {
 <<<<<<< HEAD
+<<<<<<< HEAD
       launcher = buildAgentCluster(clustername + "-10",
+=======
+      def cluster04 = clustername + "_04"
+      launcher = buildAgentCluster(cluster04,
+>>>>>>> refs/remotes/apache/develop
 =======
       def cluster04 = clustername + "_04"
       launcher = buildAgentCluster(cluster04,

@@ -13,11 +13,17 @@
     "site.global.user_group": "${USER}",
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
     "site.global.metric_collector_host": "${NN_HOST}",
     "site.global.metric_collector_port": "6188",
     "site.global.metric_collector_lib": "",
 
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
     "site.accumulo-env.java_home": "${JAVA_HOME}",
     "site.accumulo-env.tserver_heapsize": "256m",

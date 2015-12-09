@@ -44,7 +44,11 @@
         "site.hbase-site.hbase.security.access.early_out": "true",
         "site.hbase-site.hbase.coprocessor.master.classes": "org.apache.hadoop.hbase.security.access.AccessController",
 <<<<<<< HEAD
+<<<<<<< HEAD
         "site.hbase-site.hbase.coprocessor.region.classes": "org.apache.hadoop.hbase.security.token.TokenProvider,org.apache.hadoop.hbase.security.access.AccessController",
+=======
+        "site.hbase-site.hbase.coprocessor.region.classes": "org.apache.hadoop.hbase.security.token.TokenProvider,org.apache.hadoop.hbase.security.access.AccessController,org.apache.hadoop.hbase.security.access.SecureBulkLoadEndpoint",
+>>>>>>> refs/remotes/apache/develop
 =======
         "site.hbase-site.hbase.coprocessor.region.classes": "org.apache.hadoop.hbase.security.token.TokenProvider,org.apache.hadoop.hbase.security.access.AccessController,org.apache.hadoop.hbase.security.access.SecureBulkLoadEndpoint",
 >>>>>>> refs/remotes/apache/develop

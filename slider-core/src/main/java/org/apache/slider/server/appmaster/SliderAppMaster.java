@@ -112,8 +112,11 @@ import org.apache.slider.core.main.LauncherExitCodes;
 import org.apache.slider.core.main.RunService;
 import org.apache.slider.core.main.ServiceLauncher;
 <<<<<<< HEAD
+<<<<<<< HEAD
 import org.apache.slider.core.persist.ConfTreeSerDeser;
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
 import org.apache.slider.core.registry.info.CustomRegistryConstants;
 >>>>>>> refs/remotes/apache/develop
 import org.apache.slider.providers.ProviderCompleted;
@@ -489,7 +492,10 @@ public class SliderAppMaster extends AbstractSliderLaunchedService
             false);
     SliderUtils.validateSliderServerEnvironment(log, dependencyChecks);
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
 
     // create and register monitoring services
     addService(metricsAndMonitoring);
@@ -501,6 +507,9 @@ public class SliderAppMaster extends AbstractSliderLaunchedService
 
 */
     contentCache = ApplicationResouceContentCacheFactory.createContentCache(stateForProviders);
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
 
     executorService = new WorkflowExecutorService<>("AmExecutor",

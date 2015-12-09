@@ -139,10 +139,13 @@ class TestStandaloneAMDestroy extends AgentMiniClusterTestBase {
     sleep(1000)
     // twice, not expecting an error the second time
     exitCode = sliderClient.actionDestroy(clustername, destroyArgs);
+<<<<<<< HEAD
     assert 0 == exitCode
     sleep(1000)
     // twice, not expecting an error the second time
     exitCode = sliderClient.actionDestroy(clustername);
+=======
+>>>>>>> refs/remotes/apache/develop
     assert 0 == exitCode
 
     describe "post destroy checks"

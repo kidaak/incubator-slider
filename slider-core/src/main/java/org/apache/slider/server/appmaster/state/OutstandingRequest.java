@@ -130,6 +130,7 @@ public final class OutstandingRequest extends RoleHostnamePair {
    */
   public OutstandingRequest(int roleId, String hostname) {
     super(roleId, hostname);
+<<<<<<< HEAD
     this.node = null;
   }
 
@@ -147,6 +148,25 @@ public final class OutstandingRequest extends RoleHostnamePair {
   }
 
   /**
+=======
+    this.node = null;
+  }
+
+  /**
+   * Create an Anti-affine reques, including all listed nodes (there must be one)
+   * as targets.
+   * @param roleId role
+   * @param nodes list of nodes
+   */
+  public OutstandingRequest(int roleId, List<NodeInstance> nodes) {
+    super(roleId, nodes.get(0).hostname);
+    this.node = null;
+    this.antiAffine = true;
+    this.nodes.addAll(nodes);
+  }
+
+  /**
+>>>>>>> refs/remotes/apache/develop
    * Is the request located in the cluster, that is: does it have a node.
    * @return true if a node instance was supplied in the constructor
    */
@@ -239,16 +259,22 @@ public final class OutstandingRequest extends RoleHostnamePair {
       // placed request. Hostname is used in request
       hosts = new String[1];
 <<<<<<< HEAD
+<<<<<<< HEAD
       hosts[0] = node.hostname;
       relaxLocality = !role.isStrictPlacement();
       // tell the node it is in play
       node.getOrCreate(roleId);
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
       hosts[0] = target.hostname;
       // and locality flag is set to false; Slider will decide when
       // to relax things
       relaxLocality = false;
 
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
       log.info("Submitting request for container on {}", hosts[0]);
       // enable escalation for all but strict placements.
@@ -324,6 +350,7 @@ public final class OutstandingRequest extends RoleHostnamePair {
     if (node != null) {
       node.getOrCreate(roleId).requestCompleted();
     }
+<<<<<<< HEAD
   }
 
   /**
@@ -343,6 +370,27 @@ public final class OutstandingRequest extends RoleHostnamePair {
    * @param resource
    * @return
    */
+=======
+  }
+
+  /**
+   * Query to see if the request is available and ready to be escalated
+   * @param time time to check against
+   * @return true if escalation should begin
+   */
+  public synchronized boolean shouldEscalate(long time) {
+    return mayEscalate
+           && !escalated
+           && issuedRequest != null
+           && escalationTimeoutMillis < time;
+  }
+
+  /**
+   * Query for the resource requirements matching; always false before a request is issued
+   * @param resource
+   * @return
+   */
+>>>>>>> refs/remotes/apache/develop
   public synchronized boolean resourceRequirementsMatch(Resource resource) {
     return issuedRequest != null && issuedRequest.getCapability().equals(resource);
   }

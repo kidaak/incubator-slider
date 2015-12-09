@@ -18,15 +18,21 @@
 -->
   <parent>
 <<<<<<< HEAD
+<<<<<<< HEAD
     <groupId>org.apache.slider</groupId>
     <artifactId>slider</artifactId>
     <version>0.60.0-incubating</version>
     <relativePath>../../pom.xml</relativePath>
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
     <groupId>org.apache.slider.packages</groupId>
     <artifactId>slider-app-packages</artifactId>
     <version>0.90.0-incubating-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
   </parent>
   <modelVersion>4.0.0</modelVersion>
@@ -73,6 +79,10 @@
         <mapred.dir>/usr/hdp/current/hadoop-mapreduce-client</mapred.dir>
         <zk.dir>/usr/hdp/current/zookeeper-client</zk.dir>
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+        <slider.dir>/usr/hdp/current/slider-client</slider.dir>
+>>>>>>> refs/remotes/apache/develop
 =======
         <slider.dir>/usr/hdp/current/slider-client</slider.dir>
 >>>>>>> refs/remotes/apache/develop

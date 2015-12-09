@@ -29,6 +29,10 @@ import org.apache.slider.common.SliderKeys
 import org.apache.slider.common.params.Arguments
 import org.apache.slider.common.params.SliderActions
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+import org.apache.slider.funtest.ResourcePaths
+>>>>>>> refs/remotes/apache/develop
 =======
 import org.apache.slider.funtest.ResourcePaths
 >>>>>>> refs/remotes/apache/develop

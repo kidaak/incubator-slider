@@ -21,7 +21,11 @@ package org.apache.slider.funtest.lifecycle
 import groovy.transform.CompileStatic
 import groovy.util.logging.Slf4j
 import org.apache.slider.common.SliderXmlConfKeys
+<<<<<<< HEAD:slider-funtest/src/test/groovy/org/apache/slider/funtest/lifecycle/AgentLaunchFailureIT_Disabled.groovy
 <<<<<<< HEAD:slider-funtest/src/test/groovy/org/apache/slider/funtest/lifecycle/AgentLaunchFailureIT.groovy
+=======
+import org.apache.slider.funtest.ResourcePaths
+>>>>>>> refs/remotes/apache/develop:slider-funtest/src/test/groovy/org/apache/slider/funtest/lifecycle/AgentLaunchFailureIT_Disabled.groovy
 =======
 import org.apache.slider.funtest.ResourcePaths
 >>>>>>> refs/remotes/apache/develop:slider-funtest/src/test/groovy/org/apache/slider/funtest/lifecycle/AgentLaunchFailureIT_Disabled.groovy

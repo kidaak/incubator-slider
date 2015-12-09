@@ -2711,6 +2711,10 @@ public class AgentProviderService extends AbstractProviderService implements
         .getMandatoryOption(InternalKeys.INTERNAL_DATA_DIR_PATH));
     tokens.put("${JAVA_HOME}", appConf.get(AgentKeys.JAVA_HOME));
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+    tokens.put("${COMPONENT_NAME}", componentName);
+>>>>>>> refs/remotes/apache/develop
 =======
     tokens.put("${COMPONENT_NAME}", componentName);
 >>>>>>> refs/remotes/apache/develop

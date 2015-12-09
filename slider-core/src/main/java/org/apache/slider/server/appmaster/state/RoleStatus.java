@@ -138,6 +138,7 @@ public final class RoleStatus implements Cloneable, MetricSet {
 
   public long getPlacementTimeoutSeconds() {
     return providerRole.placementTimeoutSeconds;
+<<<<<<< HEAD
   }
   
   /**
@@ -151,6 +152,17 @@ public final class RoleStatus implements Cloneable, MetricSet {
   
   public boolean isStrictPlacement() {
     return 0 != (getPlacementPolicy() & PlacementPolicy.STRICT);
+=======
+  }
+  
+  /**
+   * The number of failures on a specific node that can be tolerated
+   * before selecting a different node for placement
+   * @return
+   */
+  public int getNodeFailureThreshold() {
+    return providerRole.nodeFailureThreshold;
+>>>>>>> refs/remotes/apache/develop
   }
 
   public boolean isExcludeFromFlexing() {
@@ -187,6 +199,7 @@ public final class RoleStatus implements Cloneable, MetricSet {
 
   public long incActual() {
     return actual.incrementAndGet();
+<<<<<<< HEAD
   }
 
   public long decActual() {
@@ -230,6 +243,51 @@ public final class RoleStatus implements Cloneable, MetricSet {
     return failed.get();
   }
 
+=======
+  }
+
+  public long decActual() {
+    return actual.decToFloor(1);
+  }
+
+  /**
+   * Get the request count.
+   * @return a count of requested containers
+   */
+  public long getRequested() {
+    return requested.get();
+  }
+
+  public long incRequested() {
+    totalRequested.incrementAndGet();
+    return requested.incrementAndGet();
+  }
+
+  public void cancel(long count) {
+    requested.decToFloor(count);
+  }
+
+  public void decRequested() {
+    cancel(1);
+  }
+
+  public long getReleasing() {
+    return releasing.get();
+  }
+
+  public long incReleasing() {
+    return releasing.incrementAndGet();
+  }
+
+  public long decReleasing() {
+    return releasing.decToFloor(1);
+  }
+
+  public long getFailed() {
+    return failed.get();
+  }
+
+>>>>>>> refs/remotes/apache/develop
   public long getFailedRecently() {
     return failedRecently.get();
   }
@@ -240,6 +298,17 @@ public final class RoleStatus implements Cloneable, MetricSet {
    */
   public long resetFailedRecently() {
     return failedRecently.getAndSet(0);
+<<<<<<< HEAD
+  }
+
+  public long getLimitsExceeded() {
+    return limitsExceeded.get();
+  }
+
+  public long incPendingAntiAffineRequests(long v) {
+    return pendingAntiAffineRequests.addAndGet(v);
+=======
+>>>>>>> refs/remotes/apache/develop
   }
 
   public long getLimitsExceeded() {
@@ -250,6 +319,22 @@ public final class RoleStatus implements Cloneable, MetricSet {
     return pendingAntiAffineRequests.addAndGet(v);
   }
 
+  /**
+   * Probe for an outstanding AA request being true
+   * @return true if there is an outstanding AA Request
+   */
+  public boolean isAARequestOutstanding() {
+    return outstandingAArequest != null;
+  }
+
+  /**
+   * expose the predicate {@link #isAARequestOutstanding()} as an integer,
+   * which is very convenient in tests
+   * @return 1 if there is an outstanding request; 0 if not
+   */
+  public int getOutstandingAARequestCount() {
+    return isAARequestOutstanding()? 1: 0;
+  }
   /**
    * Probe for an outstanding AA request being true
    * @return true if there is an outstanding AA Request

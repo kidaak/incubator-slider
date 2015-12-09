@@ -36,6 +36,11 @@ import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.fs.FileSystem as HadoopFS
 import org.apache.hadoop.fs.Path
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+import org.apache.hadoop.net.NetUtils
+import org.apache.hadoop.registry.client.types.ServiceRecord
+>>>>>>> refs/remotes/apache/develop
 =======
 import org.apache.hadoop.net.NetUtils
 import org.apache.hadoop.registry.client.types.ServiceRecord
@@ -65,18 +70,28 @@ import org.apache.slider.core.main.ServiceLauncher
 import org.apache.slider.core.persist.JsonSerDeser
 import org.apache.slider.core.registry.docstore.PublishedConfigSet
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
 import org.apache.slider.core.restclient.HttpOperationResponse
 import org.apache.slider.core.restclient.UgiJerseyBinding
 import org.apache.slider.core.restclient.UrlConnectionOperations
 import org.apache.slider.server.appmaster.web.HttpCacheHeaders
 import org.apache.slider.server.appmaster.web.rest.RestPaths
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
 import org.apache.slider.server.services.workflow.ForkedProcessService
 import org.junit.Assert
 import org.junit.Assume
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+import javax.ws.rs.core.HttpHeaders
+>>>>>>> refs/remotes/apache/develop
 =======
 import javax.ws.rs.core.HttpHeaders
 >>>>>>> refs/remotes/apache/develop
@@ -269,6 +284,7 @@ class SliderTestUtils extends Assert {
 
   /**
 <<<<<<< HEAD
+<<<<<<< HEAD
    * skip a test on windows
    */
   public static void skipOnWindows() {
@@ -278,6 +294,8 @@ class SliderTestUtils extends Assert {
   }
 
   /**
+=======
+>>>>>>> refs/remotes/apache/develop
 =======
 >>>>>>> refs/remotes/apache/develop
    * Assert that any needed libraries being present. On Unix none are needed;
@@ -976,6 +994,150 @@ class SliderTestUtils extends Assert {
   }
 
   /**
+   * Exec a set of commands, wait a few seconds for it to finish.
+   * @param status code
+   * @param commands
+   * @return the process
+   */
+  public static ForkedProcessService exec(int status, List<String> commands) {
+    ForkedProcessService process = exec(commands)
+
+    def exitCode = process.exitCode
+    assert exitCode != null
+    assert status == exitCode
+    return process
+  }
+
+  /**
+   * Exec a set of commands, wait a few seconds for it to finish.
+   * @param commands
+   * @return
+   */
+  public static ForkedProcessService exec(List<String> commands) {
+    ForkedProcessService process;
+    process = new ForkedProcessService(
+        commands[0],
+        [:],
+        commands);
+    process.init(new Configuration());
+    process.start();
+    int timeoutMillis = 5000
+    if (!process.waitForServiceToStop(timeoutMillis)) {
+      throw new TimeoutException(
+          "Process did not stop in " + timeoutMillis + "mS");
+    }
+    process
+  }
+
+  /**
+   * Does an application exist? Run the commands and if the
+   * operation fails with a FileNotFoundException, then
+   * this method returns false.
+   * <p>
+   *   Run something harmless like a -version command, something
+   *   which must return 0
+   *   
+   * @param commands
+   * @return true if the command sequence succeeded
+   * false if they failed with no file
+   * @throws Exception on any other failure cause
+   */
+  public static boolean doesAppExist(List<String> commands) {
+    try {
+      exec(0, commands)
+      return true;
+    } catch (ServiceStateException e) {
+      if (!(e.cause instanceof FileNotFoundException)) {
+        throw e;
+      }
+      return false;
+    }
+  }
+
+  /**
+   * Locate an executable on the path
+   * @param exe executable name. If it is an absolute path which
+   * exists then it will returned direct
+   * @return the path to an exe or null for no match
+   */
+  public static File locateExecutable(String exe) {
+    File exeNameAsPath = new File(exe).absoluteFile
+    if (exeNameAsPath.exists()) {
+      return exeNameAsPath
+    }
+    
+    File exepath = null
+    String path = extractPath()
+    String[] dirs = path.split(System.getProperty("path.separator"));
+    dirs.each { String dirname ->
+      File dir = new File(dirname)
+
+      File possible = new File(dir, exe)
+      if (possible.exists()) {
+        exepath = possible
+      }
+    }
+    return exepath
+  }
+
+  /**
+   * Lookup the PATH env var
+   * @return the path or null
+   */
+  public static String extractPath() {
+    return extractEnvVar("PATH")
+  }
+  
+  /**
+   * Find an environment variable. Uses case independent checking for
+   * the benefit of windows.
+   * Will fail if the var is not found.
+   * @param var path variable <i>in upper case</i>
+   * @return the env var
+   */
+  public static String extractEnvVar(String var) {
+    String realkey = "";
+
+    System.getenv().keySet().each { String it ->
+      if (it.toUpperCase(Locale.ENGLISH).equals(var)) {
+        realkey = it;
+      }
+    }
+
+    if (!realkey) {
+      fail("No environment variable $var found")
+    }
+    assert realkey
+    def val = System.getenv(realkey)
+    
+    log.info("$realkey = $val")
+    return val
+  }
+  /**
+   * Create a temp JSON file. After coming up with the name, the file
+   * is deleted
+   * @return the filename
+   */
+  public static  File createTempJsonFile() {
+    return tmpFile(".json")
+  }
+
+  /**
+   * Create a temp file with the specific name. It's deleted after creation,
+   * to avoid  "file exists exceptions"
+   * @param suffix suffix, e.g. ".txt"
+   * @return a path to a file which may be created
+   */
+  public static File tmpFile(String suffix) {
+    File reportFile = File.createTempFile(
+        "temp",
+        suffix,
+        new File("target"))
+    reportFile.delete()
+    return reportFile
+  }
+
+  /**
    * Execute a closure, assert it fails with a given exit code and text
    * @param exitCode exit code
    * @param text text (can be "")
@@ -1391,7 +1553,11 @@ class SliderTestUtils extends Assert {
       fail("Timeout $timeout too low: milliseconds are expected, not seconds")
     }
 <<<<<<< HEAD
+<<<<<<< HEAD
     int attemptCount = 0
+=======
+    int attemptCount = 1
+>>>>>>> refs/remotes/apache/develop
 =======
     int attemptCount = 1
 >>>>>>> refs/remotes/apache/develop
@@ -1430,6 +1596,7 @@ class SliderTestUtils extends Assert {
       if (failIfUnsuccessful) {
         fail(failureMessage)
       }
+<<<<<<< HEAD
     }
   }
 
@@ -1572,10 +1739,157 @@ class SliderTestUtils extends Assert {
       ],
       true, text) {
        log.error(prettyPrintJson(GET(target)))
+=======
+>>>>>>> refs/remotes/apache/develop
     }
   }
 
   /**
+<<<<<<< HEAD
+=======
+   * Get a value from a map; raise an assertion if it is not there
+   * @param map map to look up
+   * @param key key
+   * @return the string value
+   */
+  String requiredMapValue(Map map, String key) {
+    assert map[key] != null
+    map[key].toString()
+  }
+
+  /**
+   * Get a web page and deserialize the supplied JSON into
+   * an instance of the specific class.
+   * @param clazz class to deserialize to
+   * @param appmaster URL to base AM
+   * @param subpath subpath under AM
+   * @return the parsed data type
+   */
+  public <T> T fetchType(
+      Class<T> clazz, String appmaster, String subpath) {
+
+    def json = getWebPage(
+        appmaster,
+        RestPaths.SLIDER_PATH_APPLICATION + subpath)
+    return (T) deser(clazz, json);
+  }
+
+  public <T> T deser(Class<T> clazz, String json) {
+    JsonSerDeser serDeser = new JsonSerDeser(clazz)
+    T ctree = (T) serDeser.fromJson(json)
+    return ctree
+  }
+
+  public <T> T deser(Class<T> clazz, byte[] data) {
+    JsonSerDeser serDeser = new JsonSerDeser(clazz)
+    T ctree = (T) serDeser.fromBytes(data)
+    return ctree
+  }
+  
+  public ConfTreeOperations fetchConfigTree(
+      String appmaster, String subpath) {
+    ConfTree ctree = fetchType(ConfTree, appmaster, subpath)
+    ConfTreeOperations tree = new ConfTreeOperations(ctree)
+    return tree
+  }
+
+  /**
+   * Fetch a list of URLs, all of which must be of the same type
+   * @param clazz class of resolved values
+   * @param appmaster URL to app master
+   * @param subpaths list of subpaths
+   * @return a map of paths to values
+   */
+  public <T> Map<String, T> fetchTypeList(
+      Class<T> clazz, String appmaster, List<String> subpaths
+      ) {
+    Map < String, T > results = [:]
+    subpaths.each { String it ->
+      results[it] = (fetchType(clazz, appmaster, it))
+    }
+    return results;
+  }
+
+  /**
+   * Assert that a path resolves to an array list that contains
+   * those entries (and only those entries) expected
+   * @param appmaster AM ref
+   * @param path path under AM
+   * @param entries entries to assert the presence of
+   */
+  public void assertPathServesList(
+      String appmaster,
+      String path,
+      List<String> entries) {
+    def list = fetchType(ArrayList, appmaster, path)
+    assert list.size() == entries.size()
+    assert entries.containsAll(list)
+  }
+
+  public Map parseMetrics(String metrics) {
+    new JsonSlurper().parse(metrics.bytes) as Map
+  }
+
+  public void validateCodahaleJson(Map metricsMap) {
+    assert metricsMap["version"] == "3.0.0"
+    assert metricsMap["gauges"] instanceof Map
+    assert metricsMap["histograms"] instanceof Map
+    assert metricsMap["timers"] instanceof Map
+  }
+
+  public int getGaugeValue(Map metricsMap, String gauge, int defVal) {
+    def entry = metricsMap["gauges"][gauge]
+    if (entry != null) {
+      return entry["value"] as int
+    } else {
+      return defVal
+    }
+  }
+
+  public boolean getGaugeAsBool(Map metricsMap, String gauge, boolean defVal) {
+    return 0 !=  getGaugeValue(metricsMap, gauge, defVal ? 1 : 0)
+  }
+
+  /**
+   * Fetch and parse the JSON codahale metrics under a path
+   * @param baseUrl base path
+   * @return the fetch, parsed and partially validated JSON mapping
+   */
+  public Map getMetrics(String baseUrl) {
+    def raw = GET(baseUrl, SYSTEM_METRICS_JSON)
+    def metrics = parseMetrics(raw)
+    validateCodahaleJson(metrics)
+    return metrics;
+  }
+
+  /**
+   * Await a specific gauge being of the desired value
+   * @param am URL of appmaster
+   * @param gauge gauge name
+   * @param desiredValue desired value
+   * @param timeout timeout in millis
+   * @param sleepDur sleep in millis
+   */
+  public void awaitGaugeValue(String am, String gauge, int desiredValue,
+      int timeout,
+      int sleepDur) {
+    String target = appendToURL(am, SYSTEM_METRICS_JSON)
+    def text = "Probe $target for gauge $gauge == $desiredValue"
+    repeatUntilSuccess(text,
+      this.&probeMetricGaugeValue,
+      timeout, sleepDur,
+      [
+          url : target,
+          gauge: gauge,
+          desiredValue: desiredValue.toString()
+      ],
+      true, text) {
+       log.error(prettyPrintJson(GET(target)))
+    }
+  }
+
+  /**
+>>>>>>> refs/remotes/apache/develop
    * Probe for a metric gauge holding a value.
    *
    * Keys: "url:String", "gauge:String", "desiredValue:int"

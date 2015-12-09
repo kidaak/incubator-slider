@@ -26,7 +26,11 @@
     <groupId>org.apache.slider</groupId>
     <artifactId>slider</artifactId>
 <<<<<<< HEAD
+<<<<<<< HEAD
     <version>0.60.0-incubating</version>
+=======
+    <version>0.90.0-incubating-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/develop
 =======
     <version>0.90.0-incubating-SNAPSHOT</version>
 >>>>>>> refs/remotes/apache/develop
@@ -128,7 +132,11 @@
             <test.app.resource>../slider-core/src/test/app_packages/test_command_log/resources.json</test.app.resource>
             <test.app.template>../slider-core/src/test/app_packages/test_command_log/appConfig.json</test.app.template>
 <<<<<<< HEAD
+<<<<<<< HEAD
             <vagrant.current.working.dir></vagrant.current.working.dir>
+=======
+            <vagrant.current.working.dir />
+>>>>>>> refs/remotes/apache/develop
 =======
             <vagrant.current.working.dir />
 >>>>>>> refs/remotes/apache/develop

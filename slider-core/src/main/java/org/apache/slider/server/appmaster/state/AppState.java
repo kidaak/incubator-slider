@@ -62,6 +62,11 @@ import org.apache.slider.core.exceptions.NoSuchNodeException;
 import org.apache.slider.core.exceptions.SliderInternalStateException;
 import org.apache.slider.core.exceptions.TriggerClusterTeardownException;
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+import org.apache.slider.core.persist.AggregateConfSerDeser;
+import org.apache.slider.core.persist.ConfTreeSerDeser;
+>>>>>>> refs/remotes/apache/develop
 =======
 import org.apache.slider.core.persist.AggregateConfSerDeser;
 import org.apache.slider.core.persist.ConfTreeSerDeser;
@@ -643,6 +648,7 @@ public class AppState {
    * @throws BadConfigException bad configuration
    */
 <<<<<<< HEAD
+<<<<<<< HEAD
   @VisibleForTesting
   public ProviderRole createDynamicProviderRole(String name,
                                                 MapOperations component) throws
@@ -662,11 +668,14 @@ public class AppState {
     return newRole;
   }
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
   public ProviderRole createDynamicProviderRole(String name, MapOperations component)
       throws BadConfigException {
     String priOpt = component.getMandatoryOption(COMPONENT_PRIORITY);
     int priority = SliderUtils.parseAndValidate(
         "value of " + name + " " + COMPONENT_PRIORITY, priOpt, 0, 1, -1);
+<<<<<<< HEAD
 >>>>>>> refs/remotes/apache/develop
 
     String placementOpt = component.getOption(COMPONENT_PLACEMENT_POLICY,
@@ -675,6 +684,15 @@ public class AppState {
     int placement = SliderUtils.parseAndValidate(
         "value of " + name + " " + COMPONENT_PLACEMENT_POLICY, placementOpt, 0, 0, -1);
 
+=======
+
+    String placementOpt = component.getOption(COMPONENT_PLACEMENT_POLICY,
+        Integer.toString(PlacementPolicy.DEFAULT));
+
+    int placement = SliderUtils.parseAndValidate(
+        "value of " + name + " " + COMPONENT_PLACEMENT_POLICY, placementOpt, 0, 0, -1);
+
+>>>>>>> refs/remotes/apache/develop
     int placementTimeout = component.getOptionInt(PLACEMENT_ESCALATE_DELAY,
             DEFAULT_PLACEMENT_ESCALATE_DELAY_SECONDS);
 
@@ -1917,6 +1935,7 @@ public class AppState {
         failureThreshold);
   }
 
+<<<<<<< HEAD
   /**
    * Get the node failure threshold for a specific role, falling back to
    * the global one if not
@@ -1932,6 +1951,23 @@ public class AppState {
   }
 
   /**
+=======
+  /**
+   * Get the node failure threshold for a specific role, falling back to
+   * the global one if not
+   * @param roleName role name
+   * @return the threshold for failures
+   */
+  private int getNodeFailureThresholdForRole(String roleName) {
+    ConfTreeOperations resources =
+        instanceDefinition.getResourceOperations();
+    return resources.getComponentOptInt(roleName,
+                                        NODE_FAILURE_THRESHOLD,
+                                        nodeFailureThreshold);
+  }
+
+  /**
+>>>>>>> refs/remotes/apache/develop
    * Reset the "recent" failure counts of all roles
    */
   public void resetFailureCounts() {

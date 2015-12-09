@@ -26,10 +26,13 @@ public class PlacementPolicy {
 
   /**
 <<<<<<< HEAD
+<<<<<<< HEAD
    * Default values
    */
   public static final int DEFAULT = 0;
 =======
+=======
+>>>>>>> refs/remotes/apache/develop
    * Default value: history used, anti-affinity hinted at on rebuild/flex up
    */
   public static final int NONE = 0;
@@ -38,6 +41,9 @@ public class PlacementPolicy {
    * Default value: history used, anti-affinity hinted at on rebuild/flex up
    */
   public static final int DEFAULT = NONE;
+<<<<<<< HEAD
+>>>>>>> refs/remotes/apache/develop
+=======
 >>>>>>> refs/remotes/apache/develop
 
   /**
@@ -48,11 +54,20 @@ public class PlacementPolicy {
 
   /**
 <<<<<<< HEAD
+<<<<<<< HEAD
    * No data locality; do not bother trying to ask for any location
    */
   public static final int NO_DATA_LOCALITY = 2;
   /**
    * Anti-affinity is mandatory. 
+=======
+   * No data locality; do not use placement history
+   */
+  public static final int NO_DATA_LOCALITY = 2;
+
+  /**
+   * Anti-affinity is mandatory.
+>>>>>>> refs/remotes/apache/develop
 =======
    * No data locality; do not use placement history
    */

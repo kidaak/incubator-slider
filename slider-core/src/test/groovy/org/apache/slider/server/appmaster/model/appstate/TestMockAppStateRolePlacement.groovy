@@ -61,6 +61,10 @@ class TestMockAppStateRolePlacement extends BaseMockAppStateTest
     assert request.nodes == null
     assert request.racks == null
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+    assert request.capability
+>>>>>>> refs/remotes/apache/develop
 =======
     assert request.capability
 >>>>>>> refs/remotes/apache/develop
@@ -113,7 +117,11 @@ class TestMockAppStateRolePlacement extends BaseMockAppStateTest
     assert request2 != null
     assert request2.nodes[0] == containerHostname
 <<<<<<< HEAD
+<<<<<<< HEAD
     assert request2.relaxLocality
+=======
+    assert !request2.relaxLocality
+>>>>>>> refs/remotes/apache/develop
 =======
     assert !request2.relaxLocality
 >>>>>>> refs/remotes/apache/develop
