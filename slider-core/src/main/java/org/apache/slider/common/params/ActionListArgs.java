@@ -18,6 +18,9 @@
 
 package org.apache.slider.common.params;
 
+import java.util.HashSet;
+import java.util.Set;
+
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.Parameters;
 
@@ -41,6 +44,20 @@ public class ActionListArgs extends AbstractActionArgs {
   @Parameter(names = {ARG_VERBOSE},
       description = "print out information in details")
   public boolean verbose = false;
+
+  @Parameter(names = {ARG_CONTAINERS},
+      description = "List containers of an application instance")
+  public boolean containers;
+
+  @Parameter(names = {ARG_VERSION},
+      description = "Filter containers by app version (used with " +
+                    ARG_CONTAINERS + ")")
+  public String version;
+
+  @Parameter(names = {ARG_COMPONENTS}, variableArity = true,
+      description = "Filter containers by component names (used with " +
+                    ARG_CONTAINERS + ")")
+  public Set<String> components = new HashSet<>(0);
 
   /**
    * Get the min #of params expected

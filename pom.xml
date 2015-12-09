@@ -19,7 +19,11 @@
   <groupId>org.apache.slider</groupId>
   <artifactId>slider</artifactId>
   <name>Slider</name>
+<<<<<<< HEAD
   <version>0.60.0-incubating</version>
+=======
+  <version>0.90.0-incubating-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/develop
   <packaging>pom</packaging>
 
   <description>
@@ -40,10 +44,7 @@
     <module>slider-agent</module>
     <module>slider-assembly</module>
     <module>slider-funtest</module>
-    <module>slider-providers/hbase/slider-hbase-provider</module>
-    <module>slider-providers/hbase/hbase-funtests</module>
-    <module>slider-providers/accumulo/slider-accumulo-provider</module>
-    <module>slider-providers/accumulo/accumulo-funtests</module>
+    <!-- the app-packages module is added as a profile-->
   </modules>
 
   <licenses>
@@ -81,9 +82,7 @@
       <name>${distMgmtSnapshotsName}</name>
       <url>${distMgmtSnapshotsUrl}</url>
     </snapshotRepository>
-
-
-
+    
   </distributionManagement>
   
   <mailingLists>
@@ -116,9 +115,9 @@
     <!-- 
     Java versions
     -->
-    <project.java.src.version>1.6</project.java.src.version>
+    <project.java.src.version>1.7</project.java.src.version>
     <enforced.java.version>${project.java.src.version}</enforced.java.version>
-    <groovy.version>2.2.2</groovy.version>
+    <groovy.version>2.4.5</groovy.version>
     
     <!-- 
     test options
@@ -137,11 +136,10 @@
     <!--
     core artifacts
     -->
-    <hadoop.version>2.6.0-SNAPSHOT</hadoop.version>
+    <hadoop.version>2.6.0</hadoop.version>
 
-    <hbase.version>0.98.4-hadoop2</hbase.version>
-    <accumulo.version>1.6.1</accumulo.version>
-    
+    <hbase.version>0.99.0</hbase.version>
+    <accumulo.version>1.7.0</accumulo.version>
     <!--
      artifact versions
     -->
@@ -160,6 +158,7 @@
     <gson.version>2.2.2</gson.version>
     <guice.version>3.0</guice.version>
     <httpclient.version>3.1</httpclient.version>
+    <httpclient4.version>4.2.5</httpclient4.version>
 
     <jackson.version>1.9.13</jackson.version>
     <jcommander.version>1.30</jcommander.version>
@@ -170,6 +169,10 @@
     <jsr311-api.version>1.1.1</jsr311-api.version>
     <jaxb-api.version>2.2.7</jaxb-api.version>
     <jsp.version>2.1</jsp.version>
+<<<<<<< HEAD
+=======
+    <jsch.version>0.1.51</jsch.version>
+>>>>>>> refs/remotes/apache/develop
     <junit.version>4.11</junit.version>
     <log4j.version>1.2.17</log4j.version>
     <metrics.version>3.0.1</metrics.version>
@@ -180,41 +183,53 @@
     <protobuf.version>2.5.0</protobuf.version>
 
     <slf4j.version>1.7.5</slf4j.version>
+    <storm.version>0.9.3</storm.version>
     <stringtemplate.version>2.4.1</stringtemplate.version>
     <zookeeper.version>3.4.6</zookeeper.version>
 
 
-    <!--  Plugin versions    -->
+    <!-- artifacts used in plugins -->
+    <apache-resources.version>1.0.4</apache-resources.version>
+    <apache-source-release-assembly-descriptor.version>1.0.4</apache-source-release-assembly-descriptor.version>
     <gmavenVersion>1.5</gmavenVersion>
     <gmavenProviderSelection>2.0</gmavenProviderSelection>
-    <groovy-eclipse-compiler.version>2.8.0-01</groovy-eclipse-compiler.version>
-    <groovy-eclipse-batch.version>2.1.3-01</groovy-eclipse-batch.version>
+    <groovy-eclipse-compiler.version>2.9.1-01</groovy-eclipse-compiler.version>
+    <groovy-eclipse-batch.version>2.3.7-01</groovy-eclipse-batch.version>
     <buildnumber-maven-plugin.version>1.2</buildnumber-maven-plugin.version>
-    
+  
     
     <maven.version.range>[3.0.0,)</maven.version.range>
-    
+
+    <!--  Plugin versions    -->  
     <maven-antrun-plugin.version>1.7</maven-antrun-plugin.version>
     <maven-assembly-plugin.version>2.4</maven-assembly-plugin.version>
     <maven.cobertura.version>2.5.2</maven.cobertura.version>
     <maven-compiler-plugin.version>3.1</maven-compiler-plugin.version>
     <maven-dependency-plugin.version>2.8</maven-dependency-plugin.version>
-    <maven-deploy-plugin.version>2.7</maven-deploy-plugin.version>
+    <maven-deploy-plugin.version>2.8.2</maven-deploy-plugin.version>
     <maven-doxia-module-markdown.version>1.4</maven-doxia-module-markdown.version>
-    <maven-enforcer-plugin.version>1.0</maven-enforcer-plugin.version>
+    <maven-enforcer-plugin.version>1.3.1</maven-enforcer-plugin.version>
     <maven-exec-plugin.version>1.2.1</maven-exec-plugin.version>
-    <maven-jar-plugin.version>2.3.1</maven-jar-plugin.version>
-    <maven.javadoc.version>2.8</maven.javadoc.version>
+    <maven-install-plugin.version>2.5.2</maven-install-plugin.version>
+    <maven-gpg-plugin.version>1.5</maven-gpg-plugin.version>
+    <maven-groovydoc-plugin.version>1.3</maven-groovydoc-plugin.version>
+    <maven-jar-plugin.version>2.5</maven-jar-plugin.version>
+    <maven.javadoc.version>2.10.1</maven.javadoc.version>
+    <maven.license.version>1.8</maven.license.version>
     <maven.project.version>2.4</maven.project.version>
     <maven.properties.version>1.0-alpha-2</maven.properties.version>
     <maven-project-info-reports-plugin.version>2.7</maven-project-info-reports-plugin.version>
+    <maven-release-plugin.version>2.5.1</maven-release-plugin.version>
+    <maven-remote-resources-plugin.version>1.5</maven-remote-resources-plugin.version>
+    <maven-resources-plugin.version>2.6</maven-resources-plugin.version>
     <maven-rpm-plugin.version>2.1-alpha-4</maven-rpm-plugin.version>
-    <maven-site-plugin.version>3.3</maven-site-plugin.version>
-    <maven-source-plugin.version>2.2.1</maven-source-plugin.version>
-    <maven-surefire-plugin.version>2.16</maven-surefire-plugin.version>
-    <maven-surefire-report-plugin.version>2.16</maven-surefire-report-plugin.version>
-    <maven-failsafe-plugin.version>2.16</maven-failsafe-plugin.version>
-    <apache-rat-plugin.version>0.10</apache-rat-plugin.version>
+    <maven-site-plugin.version>3.4</maven-site-plugin.version>
+    <maven-source-plugin.version>2.3</maven-source-plugin.version>
+    <maven-surefire-plugin.version>2.17</maven-surefire-plugin.version>
+    <maven-surefire-report-plugin.version>${maven-surefire-plugin.version}</maven-surefire-report-plugin.version>
+    <maven-failsafe-plugin.version>${maven-surefire-plugin.version}</maven-failsafe-plugin.version>
+    <maven-verifier-plugin.version>1.0</maven-verifier-plugin.version>
+    <apache-rat-plugin.version>0.11</apache-rat-plugin.version>
 
     <!-- build options-->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -226,17 +241,21 @@
     <github.site.plugin.version>0.8</github.site.plugin.version>
     <maven-site-plugin.skipDeploy>true</maven-site-plugin.skipDeploy>
     <github.downloads.plugin.version>0.6</github.downloads.plugin.version>
+    
+    <!-- override point for ASF staging/snapshot repos -->
+    <asf.staging>https://repository.apache.org/content/groups/staging/</asf.staging>
+    <asf.snapshots>https://repository.apache.org/content/repositories/snapshots/</asf.snapshots>
   </properties>
 
 
   <repositories>
     <repository>
       <id>ASF Staging</id>
-      <url>https://repository.apache.org/content/groups/staging/</url>
+      <url>${asf.staging}</url>
     </repository>
     <repository>
       <id>ASF Snapshots</id>
-      <url>https://repository.apache.org/content/repositories/snapshots/</url>
+      <url>${asf.snapshots}</url>
       <snapshots>
         <enabled>true</enabled>
       </snapshots>
@@ -312,7 +331,7 @@
           </execution>
         </executions>
       </plugin>
-      
+
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-site-plugin</artifactId>
@@ -351,7 +370,56 @@
         </executions>
       </plugin>
 
+      <!-- We want to package up license resources in the JARs produced -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-remote-resources-plugin</artifactId>
+        <version>${maven-remote-resources-plugin.version}</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>process</goal>
+            </goals>
+            <configuration>
+              <resourceBundles>
+                <resourceBundle>org.apache:apache-jar-resource-bundle:1.4</resourceBundle>
+              </resourceBundles>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
 
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>license-maven-plugin</artifactId>
+        <version>${maven.license.version}</version>
+        <executions>
+<!--
+          <execution>
+            <id>download-licenses</id>
+            <goals>
+              <goal>download-licenses</goal>
+            </goals>
+          </execution>
+-->
+          <execution>
+            <id>default-cli</id>
+            <configuration>
+              <licenseMerges>
+                <licenseMerge>The Apache Software License, Version 2.0|Apache License, Version 2.0</licenseMerge>
+                <licenseMerge>The Apache Software License, Version 2.0|Apache License 2.0</licenseMerge>
+                <licenseMerge>The Apache Software License, Version 2.0|Apache Public License 2.0</licenseMerge>
+                <licenseMerge>The Apache Software License, Version 2.0|Apache 2</licenseMerge>
+                <licenseMerge>The Apache Software License, Version 2.0|ASF 2.0</licenseMerge>
+                <licenseMerge>The Apache Software License, Version 2.0|Apache License Version 2</licenseMerge>
+                <licenseMerge>The Apache Software License, Version 2.0|Apache Software License - Version 2.0</licenseMerge>
+                <licenseMerge>New BSD License|New BSD license</licenseMerge>
+                <licenseMerge>GNU Lesser General Public License (LGPL), Version 2.1|LGPL 2.1</licenseMerge>
+              </licenseMerges>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
   </plugins>
   </build>
 
@@ -454,6 +522,13 @@
       </dependency>
 
       <dependency>
+        <groupId>org.codehaus.groovy</groupId>
+        <artifactId>groovy-all</artifactId>
+        <classifier>indy</classifier>
+        <version>${groovy.version}</version>
+      </dependency>
+
+      <dependency>
         <groupId>com.beust</groupId>
         <artifactId>jcommander</artifactId>
         <version>${jcommander.version}</version>
@@ -467,13 +542,41 @@
 
       <!-- hadoop-client includes the following jars, so they do not need to be
         included separately:
-        hadoop-common, hadoop-hdfs, hadoop-mapreduce-client-app,
+        hadoop-common, hadoop-hdfs (client?), hadoop-mapreduce-client-app,
         hadoop-yarn-api, hadoop-mapreduce-client-core,
         hadoop-mapreduce-client-jobclient, and hadoop-annotations
       -->
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-client</artifactId>
+        <version>${hadoop.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.codehaus.jackson</groupId>
+            <artifactId>jackson-core-asl</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpclient</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpcore</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+
+      <!--
+        Hadoop HDFS is pulled in to guarantee that any split to hadoop-hdfs-client doesn't
+        break the build.
+      -->
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-hdfs</artifactId>
         <version>${hadoop.version}</version>
         <exclusions>
           <exclusion>
@@ -509,6 +612,10 @@
             <groupId>com.sun.jersey.jersey-test-framework</groupId>
             <artifactId>jersey-test-framework-grizzly2</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>net.java.dev.jets3t</groupId>
+            <artifactId>jets3t</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 
@@ -529,7 +636,7 @@
         <artifactId>hadoop-yarn-registry</artifactId>
         <version>${hadoop.version}</version>
       </dependency>
-      
+
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-yarn-server-web-proxy</artifactId>
@@ -613,7 +720,19 @@
           </exclusion>
         </exclusions>
       </dependency>
-      
+
+      <dependency>
+        <groupId>org.apache.httpcomponents</groupId>
+        <artifactId>httpclient</artifactId>
+        <version>${httpclient4.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.apache.httpcomponents</groupId>
+        <artifactId>httpcore</artifactId>
+        <version>${httpclient4.version}</version>
+      </dependency>
+  
       <!-- ======================================================== -->
       <!-- HBASE -->
       <!-- ======================================================== -->
@@ -942,6 +1061,10 @@
         <version>${zookeeper.version}</version>
         <exclusions>
           <exclusion>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.junit</groupId>
             <artifactId>junit</artifactId>
           </exclusion>
@@ -1065,16 +1188,10 @@
 
       <dependency>
         <groupId>org.apache.curator</groupId>
-        <artifactId>curator-x-discovery</artifactId>
+        <artifactId>curator-recipes</artifactId>
         <version>${curator.version}</version>
       </dependency>
 
-      <dependency>
-        <groupId>org.apache.curator</groupId>
-        <artifactId>curator-x-discovery-server</artifactId>
-        <version>${curator.version}</version>
-      </dependency>
-      
       <dependency>
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
@@ -1117,7 +1234,7 @@
         <version>${slf4j.version}</version>
       </dependency>
 
-      <!-- Used for unit testing -->
+      <!-- Used for testing -->
       <dependency>
         <groupId>junit</groupId>
         <artifactId>junit</artifactId>
@@ -1128,6 +1245,12 @@
         <groupId>com.google.protobuf</groupId>
         <artifactId>protobuf-java</artifactId>
         <version>${protobuf.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>com.jcraft</groupId>
+        <artifactId>jsch</artifactId>
+        <version>${jsch.version}</version>
       </dependency>
 
       <!-- ======================================================== -->
@@ -1161,6 +1284,12 @@
       <dependency>
         <groupId>com.sun.jersey</groupId>
         <artifactId>jersey-client</artifactId>
+        <version>${jersey.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>com.sun.jersey.contribs</groupId>
+        <artifactId>jersey-apache-client</artifactId>
         <version>${jersey.version}</version>
       </dependency>
 
@@ -1221,6 +1350,18 @@
       <dependency>
         <groupId>com.codahale.metrics</groupId>
         <artifactId>metrics-core</artifactId>
+        <version>${metrics.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>com.codahale.metrics</groupId>
+        <artifactId>metrics-ganglia</artifactId>
+        <version>${metrics.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>com.codahale.metrics</groupId>
+        <artifactId>metrics-servlets</artifactId>
         <version>${metrics.version}</version>
       </dependency>
 
@@ -1299,6 +1440,15 @@
         <version>1.5</version>
       </dependency>
 
+<<<<<<< HEAD
+=======
+      <dependency>
+        <groupId>asm</groupId>
+        <artifactId>asm</artifactId>
+        <version>3.3.1</version>
+      </dependency>
+
+>>>>>>> refs/remotes/apache/develop
     </dependencies>
     
   </dependencyManagement>
@@ -1306,6 +1456,7 @@
   <profiles>
 
     <profile>
+<<<<<<< HEAD
       <id>Non-Windows</id>
       <activation>
         <os>
@@ -1332,6 +1483,8 @@
       </modules>
     </profile>
     <profile>
+=======
+>>>>>>> refs/remotes/apache/develop
       <id>rat</id>
       <build>
         <plugins>
@@ -1351,6 +1504,7 @@
               <excludes>
                 <exclude>**/*.json</exclude>
                 <exclude>**/*.tar</exclude>
+                <exclude>**/THIRD-PARTY.properties</exclude>
                 <exclude>**/build.properties</exclude>
                 <exclude>**/regionservers</exclude>
                 <exclude>**/slaves</exclude>
@@ -1358,17 +1512,51 @@
                 <exclude>**/dfs.exclude</exclude>
                 <exclude>**/*.iml</exclude>
                 <exclude>**/rat.txt</exclude>
+                <exclude>**/test_password_file</exclude>
                 <exclude>DISCLAIMER</exclude>
                 <exclude>app-packages/hbase/target/**</exclude>
                 <exclude>target/*</exclude>
+                <exclude>DEPENDENCIES</exclude>
               </excludes>
             </configuration>
           </plugin>
         </plugins>
       </build>
     </profile>
+
+    <profile>
+      <id>all-modules</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
+      <modules>
+        <module>app-packages</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>no-app-packages</id>
+      <modules>
+      </modules>
+    </profile>
+
     <profile>
       <id>apache-release</id>
+      <!-- 
+      Build the release artifacts which become 
+      the official subject of any release vote.
+       
+      The process explicitly skips the app-packages as they are to be released
+      separately.
+       -->
+      <modules>
+        <module>app-packages/command-logger/application-pkg</module>
+        <module>app-packages/command-logger/slider-pkg</module>
+        <module>slider-core</module>
+        <module>slider-agent</module>
+        <module>slider-assembly</module>
+        <module>slider-funtest</module>
+      </modules>
       <build>
         <plugins>
           <plugin>
@@ -1379,7 +1567,7 @@
               <dependency>
                 <groupId>org.apache.apache.resources</groupId>
                 <artifactId>apache-source-release-assembly-descriptor</artifactId>
-                <version>1.0.4</version>
+                <version>${apache-source-release-assembly-descriptor.version}</version>
               </dependency>
             </dependencies>
             <executions>
@@ -1400,7 +1588,77 @@
               </execution>
             </executions>
           </plugin>
-        </plugins>
+
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-source-plugin</artifactId>
+            <version>${maven-source-plugin.version}</version>
+            <executions>
+              <execution>
+              <id>attach-sources</id>
+                <goals>
+                <goal>jar</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <version>${maven.javadoc.version}</version>
+            <executions>
+              <execution>
+              <id>attach-javadocs</id>
+              <goals>
+                <goal>jar</goal>
+              </goals>
+              </execution>
+            </executions>
+          </plugin>
+            <!--
+            <plugin>
+              <groupId>com.bluetrainsoftware.maven</groupId>
+              <artifactId>maven-groovydoc-plugin</artifactId>
+              <version>${maven-groovydoc-plugin.version}</version>
+              <executions>
+                <execution>
+                  <id>attach-javadocs</id>
+                  <goals>
+                    <goal>attach-docs</goal>
+                  </goals>
+                </execution>
+              </executions>
+            </plugin>
+            -->
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <version>${maven-gpg-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>sign-artifacts</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>sign</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+
+          <!-- We want to deploy the artifact to a staging location for perusal -->
+          <!--
+          <plugin>
+            <inherited>true</inherited>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-deploy-plugin</artifactId>
+            <version>${maven-deploy-plugin.version}</version>
+            <configuration>
+              <updateReleaseInfo>true</updateReleaseInfo>
+            </configuration>
+          </plugin>        
+            -->
+          </plugins>
       </build>
     </profile>
 
@@ -1409,6 +1667,7 @@
       <id>branch-2.6</id>
       <properties>
         <hadoop.version>2.6.0-SNAPSHOT</hadoop.version>
+<<<<<<< HEAD
       </properties>
     </profile>
 
@@ -1417,14 +1676,70 @@
       <id>release-2.6</id>
       <properties>
         <hadoop.version>2.6.0</hadoop.version>
+=======
+>>>>>>> refs/remotes/apache/develop
+      </properties>
+    </profile>
+
+    <profile>
+      <!-- 2.6 -->
+      <id>release-2.6</id>
+      <properties>
+        <hadoop.version>2.6.0</hadoop.version>
+      </properties>
+    </profile>
+
+    <profile>
+      <!-- 2.7.0 -->
+      <id>release-2.7.0</id>
+      <properties>
+        <hadoop.version>2.7.0</hadoop.version>
+        <curator.version>2.7.1</curator.version>
+        <zookeeper.version>3.4.6</zookeeper.version>
+      </properties>
+    </profile>
+
+    <profile>
+      <!-- hadoop 2.7.1 -->
+      <id>release-2.7.1</id>
+      <properties>
+        <hadoop.version>2.7.1</hadoop.version>
+        <curator.version>2.7.1</curator.version>
+        <zookeeper.version>3.4.6</zookeeper.version>
+      </properties>
+    </profile>
+
+    <profile>
+      <!-- hadoop 2.7.1 -->
+      <id>release-2.7</id>
+      <properties>
+        <hadoop.version>2.7.1</hadoop.version>
+        <curator.version>2.7.1</curator.version>
+        <zookeeper.version>3.4.6</zookeeper.version>
       </properties>
     </profile>
 
     <profile>
       <!-- hadoop branch-2 builds  -->
+      <id>branch-2.8</id>
+      <properties>
+        <hadoop.version>2.8.0-SNAPSHOT</hadoop.version>
+        <curator.version>2.7.1</curator.version>
+        <zookeeper.version>3.4.6</zookeeper.version>
+      </properties>
+    </profile>
+    
+    <profile>
+      <!-- hadoop branch-2 builds  -->
       <id>branch-2</id>
       <properties>
+<<<<<<< HEAD
         <hadoop.version>2.7.0-SNAPSHOT</hadoop.version>
+=======
+        <hadoop.version>2.9.0-SNAPSHOT</hadoop.version>
+        <curator.version>2.7.1</curator.version>
+        <zookeeper.version>3.4.6</zookeeper.version>
+>>>>>>> refs/remotes/apache/develop
       </properties>
     </profile>
     
@@ -1433,6 +1748,19 @@
       <id>trunk</id>
       <properties>
         <hadoop.version>3.0.0-SNAPSHOT</hadoop.version>
+        <curator.version>2.7.1</curator.version>
+        <zookeeper.version>3.4.6</zookeeper.version>
+      </properties>
+    </profile>
+
+    <profile>
+      <!-- Java 8 build -->
+      <id>java8</id>
+      <properties>
+        <project.java.src.version>1.8</project.java.src.version>
+<!--
+        <jersey.version>1.19</jersey.version>
+-->
       </properties>
     </profile>
     
@@ -1462,53 +1790,6 @@
     </profile>
 
     <profile>
-      <!-- anything for a github release -->
-      <!-- see https://github.com/github/maven-plugins-->
-      <!-- this doesn't seem to work and is not in active us-->
-      <id>github</id>
-      <properties>
-        <maven-site-plugin.skipDeploy>false</maven-site-plugin.skipDeploy>
-      </properties>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>com.github.github</groupId>
-            <artifactId>site-maven-plugin</artifactId>
-            <version>${github.site.plugin.version}</version>
-            <inherited>true</inherited>
-            <configuration>
-              <message>Creating site for ${project.version}</message>
-              <dryRun>false</dryRun>
-              <repositoryName>slider</repositoryName>
-              <repositoryOwner>hortonworks</repositoryOwner>
-            </configuration>
-            <executions>
-              <execution>
-                <goals>
-                  <goal>site</goal>
-                </goals>
-                <phase>site-deploy</phase>
-              </execution>
-            </executions>
-          </plugin>
-
-          <plugin>
-            <artifactId>maven-deploy-plugin</artifactId>
-            <version>${maven-deploy-plugin.version}</version>
-            <configuration>
-              <altDeploymentRepository>
-                internal.repo::default::file://${project.build.directory}/mvn-repo
-              </altDeploymentRepository>
-            </configuration>
-          </plugin>
-
-  
-        </plugins>
-      </build>
-
-    </profile>
-    
-    <profile>
     <id>strict</id>
     <!--enable this if you want to get told off about dependency conflict-->
     <build>
@@ -1523,7 +1804,7 @@
               <id>enforce</id>
               <configuration>
                 <rules>
-                  <DependencyConvergence/>
+                  <DependencyConvergence />
                 </rules>
               </configuration>
               <goals>
@@ -1543,6 +1824,7 @@
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-gpg-plugin</artifactId>
+            <version>${maven-gpg-plugin.version}</version>
             <executions>
               <execution>
                 <id>sign-artifacts</id>
@@ -1579,7 +1861,51 @@
         </repository>
       </repositories>
     </profile>
-  </profiles>
 
+    <!-- see https://github.com/rvowles/maven-groovydoc-plugin -->
+    <profile>
+      <id>groovydoc</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>com.bluetrainsoftware.maven</groupId>
+            <artifactId>maven-groovydoc-plugin</artifactId>
+            <version>${maven-groovydoc-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>attach-docs</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>attach-docs</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    
+    <profile>
+      <id>javadoc</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <version>${maven.javadoc.version}</version>
+            <executions>
+              <execution>
+                <id>attach-javadocs</id>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+  </profiles>
 
 </project>

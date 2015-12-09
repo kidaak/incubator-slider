@@ -44,7 +44,7 @@ public interface ResourceKeys {
 
 
   /**
-   * #of instances of a component
+   * #of instances of a component: {@value}
    *
   */
   String COMPONENT_INSTANCES = "yarn.component.instances";
@@ -76,7 +76,7 @@ public interface ResourceKeys {
    */
   String YARN_LABEL_EXPRESSION = "yarn.label.expression";
 
-  /** {@value} */
+  /** default label expression: */
   String DEF_YARN_LABEL_EXPRESSION = null;
 
 
@@ -100,7 +100,11 @@ public interface ResourceKeys {
    */
   String COMPONENT_PLACEMENT_POLICY = "yarn.component.placement.policy";
 
-  
+  /**
+   * Maximum number of node failures that can be tolerated by a component on a specific node
+   */
+  String NODE_FAILURE_THRESHOLD =
+      "yarn.node.failure.threshold";
 
   /**
    * maximum number of failed containers (in a single role)
@@ -130,8 +134,49 @@ public interface ResourceKeys {
   int DEFAULT_CONTAINER_FAILURE_THRESHOLD = 5;
 
   /**
+   * Default node failure threshold for a component instance: {@value}
+   * Should to be lower than default component failure threshold to allow
+   * the component to start elsewhere
+   */
+  int DEFAULT_NODE_FAILURE_THRESHOLD = 3;
+
+  /**
+   * Failure threshold is unlimited: {@value}
+   */
+  int NODE_FAILURE_THRESHOLD_UNLIMITED = -1;
+
+  /**
+   * Time in seconds to escalate placement delay
+   */
+  String PLACEMENT_ESCALATE_DELAY =
+      "yarn.placement.escalate.seconds";
+
+  /**
+   * Time to have a strict placement policy outstanding before 
+   * downgrading to a lax placement (for those components which permit that).
+   * <ol>
+   *   <li>For strictly placed components, there's no relaxation.</li>
+   *   <li>For components with no locality, there's no need to relax</li>
+   * </ol>
+   * 
+   */
+  int DEFAULT_PLACEMENT_ESCALATE_DELAY_SECONDS = 30;
+
+  /**
    * Log aggregation include, exclude patterns
    */
   String YARN_LOG_INCLUDE_PATTERNS = "yarn.log.include.patterns";
   String YARN_LOG_EXCLUDE_PATTERNS = "yarn.log.exclude.patterns";
+
+  /**
+   * Window of time where application master's failure count
+   * can be reset to 0.
+   */
+  String YARN_RESOURCEMANAGER_AM_RETRY_COUNT_WINDOW_MS  =
+      "yarn.resourcemanager.am.retry-count-window-ms";
+
+  /**
+   * The default window for Slider.
+   */
+  long DEFAULT_AM_RETRY_COUNT_WINDOW_MS = 300000;
 }

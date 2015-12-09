@@ -18,42 +18,72 @@
 
 package org.apache.slider.test
 
+import com.sun.jersey.api.client.Client
+import com.sun.jersey.api.client.config.ClientConfig
+import com.sun.jersey.api.client.config.DefaultClientConfig
+import com.sun.jersey.api.json.JSONConfiguration
+import com.sun.jersey.client.urlconnection.URLConnectionClientHandler
 import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
 import groovy.transform.CompileStatic
 import groovy.util.logging.Slf4j
 import org.apache.commons.httpclient.HttpClient
 import org.apache.commons.httpclient.MultiThreadedHttpConnectionManager
+import org.apache.commons.httpclient.URI
 import org.apache.commons.httpclient.methods.GetMethod
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.fs.FileSystem as HadoopFS
 import org.apache.hadoop.fs.Path
+<<<<<<< HEAD
+=======
+import org.apache.hadoop.net.NetUtils
+import org.apache.hadoop.registry.client.types.ServiceRecord
+>>>>>>> refs/remotes/apache/develop
 import org.apache.hadoop.service.ServiceStateException
 import org.apache.hadoop.util.Shell
 import org.apache.hadoop.yarn.api.records.ApplicationReport
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.registry.client.types.ServiceRecord
+import org.apache.hadoop.yarn.webapp.ForbiddenException
+import org.apache.hadoop.yarn.webapp.NotFoundException
 import org.apache.slider.api.ClusterDescription
 import org.apache.slider.api.ClusterNode
 import org.apache.slider.api.RoleKeys
+import org.apache.slider.api.StateValues
 import org.apache.slider.client.SliderClient
 import org.apache.slider.common.params.Arguments
 import org.apache.slider.common.tools.Duration
 import org.apache.slider.common.tools.SliderUtils
 import org.apache.slider.core.conf.AggregateConf
+import org.apache.slider.core.conf.ConfTree
+import org.apache.slider.core.conf.ConfTreeOperations
 import org.apache.slider.core.exceptions.BadClusterStateException
 import org.apache.slider.core.exceptions.SliderException
 import org.apache.slider.core.exceptions.WaitTimeoutException
 import org.apache.slider.core.main.ServiceLaunchException
 import org.apache.slider.core.main.ServiceLauncher
+import org.apache.slider.core.persist.JsonSerDeser
 import org.apache.slider.core.registry.docstore.PublishedConfigSet
+<<<<<<< HEAD
+=======
+import org.apache.slider.core.restclient.HttpOperationResponse
+import org.apache.slider.core.restclient.UgiJerseyBinding
+import org.apache.slider.core.restclient.UrlConnectionOperations
+import org.apache.slider.server.appmaster.web.HttpCacheHeaders
+import org.apache.slider.server.appmaster.web.rest.RestPaths
+>>>>>>> refs/remotes/apache/develop
 import org.apache.slider.server.services.workflow.ForkedProcessService
 import org.junit.Assert
 import org.junit.Assume
 
+<<<<<<< HEAD
+=======
+import javax.ws.rs.core.HttpHeaders
+>>>>>>> refs/remotes/apache/develop
 import java.util.concurrent.TimeoutException
 
 import static Arguments.ARG_OPTION
+import static org.apache.slider.server.appmaster.web.rest.RestPaths.SYSTEM_METRICS_JSON
 
 /**
  * Static utils for tests in this package and in other test projects.
@@ -79,19 +109,63 @@ class SliderTestUtils extends Assert {
     log.info("");
   }
 
-  public static String prettyPrint(String json) {
+  /**
+   * Convert a JSON string to something readable
+   * @param json
+   * @return a string for printing
+   */
+  public static String prettyPrintJson(String json) {
     JsonOutput.prettyPrint(json)
   }
 
+  /**
+   * Convert a JSON string to something readable
+   * @param json
+   * @return a string for printing
+   */
+  public static String prettyPrintAsJson(Object src) {
+    JsonOutput.prettyPrint(JsonOutput.toJson(src))
+  }
+
+  /**
+   * Skip the test with a message
+   * @param message message logged and thrown
+   */
   public static void skip(String message) {
     log.warn("Skipping test: {}", message)
     Assume.assumeTrue(message, false);
   }
 
+  /**
+   * Skip the test with a message if condition holds
+   * @param condition predicate
+   * @param message message logged and thrown
+   */
   public static void assume(boolean condition, String message) {
     if (!condition) {
       skip(message)
     }
+  }
+
+  /**
+   * Skip a test if not running on Windows
+   */
+  public static void assumeWindows() {
+    assume(Shell.WINDOWS, "not windows")
+  }
+
+  /**
+   * Skip a test if running on Windows
+   */
+  public static void assumeNotWindows() {
+    assume(!Shell.WINDOWS, "windows")
+  }
+
+  /**
+   * skip a test on windows
+   */
+  public static void skipOnWindows() {
+    assumeNotWindows();
   }
 
   /**
@@ -194,6 +268,7 @@ class SliderTestUtils extends Assert {
   }
 
   /**
+<<<<<<< HEAD
    * skip a test on windows
    */
   public static void skipOnWindows() {
@@ -203,6 +278,8 @@ class SliderTestUtils extends Assert {
   }
 
   /**
+=======
+>>>>>>> refs/remotes/apache/develop
    * Assert that any needed libraries being present. On Unix none are needed;
    * on windows they must be present
    */
@@ -335,7 +412,7 @@ class SliderTestUtils extends Assert {
       if (timedOut) {
         duration.finish();
         describe("$operation: role count not met after $duration: $details")
-        log.info(prettyPrint(status.toJsonString()))
+        log.info(prettyPrintJson(status.toJsonString()))
         fail("$operation: role counts not met after $duration: " +
              details.toString() +
              " in \n$status ")
@@ -360,7 +437,7 @@ class SliderTestUtils extends Assert {
       String role)
   throws WaitTimeoutException, IOException, SliderException {
     int state = client.waitForRoleInstanceLive(role, spintime);
-    return state == ClusterDescription.STATE_LIVE;
+    return state == StateValues.STATE_LIVE;
   }
 
   public static ClusterDescription dumpClusterStatus(
@@ -381,7 +458,7 @@ class SliderTestUtils extends Assert {
       String text,
       ClusterDescription status) {
     describe(text)
-    log.info(prettyPrint(status.toJsonString()))
+    log.info(prettyPrintJson(status.toJsonString()))
   }
 
 
@@ -413,7 +490,7 @@ class SliderTestUtils extends Assert {
    */
 
   public static String GET(URL url) {
-    return fetchWebPageWithoutError(url.toString())
+    return fetchWebPageRaisedErrorCodes(url.toString())
   }
 
   public static String GET(URL url, String path) {
@@ -423,11 +500,10 @@ class SliderTestUtils extends Assert {
   public static String GET(String base, String path) {
     String s = appendToURL(base, path)
     return GET(s)
-
   }
 
   def static String GET(String s) {
-    return fetchWebPageWithoutError(s)
+    return fetchWebPageRaisedErrorCodes(s)
   }
 
   public static String appendToURL(String base, String path) {
@@ -439,7 +515,8 @@ class SliderTestUtils extends Assert {
   }
 
   /**
-   * Fetch a web page 
+   * Fetch a web page using HttpClient 3.1.
+   * This <i>DOES NOT</i> work with secure connections.
    * @param url URL
    * @return the response body
    */
@@ -467,11 +544,17 @@ class SliderTestUtils extends Assert {
 
   /**
    * Fetches a web page asserting that the response code is between 200 and 400.
+   * This <i>DOES NOT</i> work with secure connections.
+   * <p>
+   * 
    * Will error on 400 and 500 series response codes and let 200 and 300 through. 
-   * @param url
-   * @return
+   * @param url URL to get as string
+   * @return body of response
+   * @throws IOException Network IO problems or exit code >= 400 not specifically handled
+   * @throws NotFoundException 404 received
+   * @throws ForbiddenException 401 received
    */
-  public static String fetchWebPageWithoutError(String url) {
+  public static String fetchWebPageRaisedErrorCodes(String url) {
     assert null != url
 
     log.info("Fetching HTTP content at " + url);
@@ -479,17 +562,195 @@ class SliderTestUtils extends Assert {
     def client = new HttpClient(new MultiThreadedHttpConnectionManager());
     client.httpConnectionManager.params.connectionTimeout = 10000;
     GetMethod get = new GetMethod(url);
+    URI destURI = get.getURI()
+    assert destURI.port != 0
+    assert destURI.host
+
 
     get.followRedirects = true;
-    int resultCode = client.executeMethod(get);
+    int resultCode
+    try {
+      resultCode = client.executeMethod(get);
+    } catch (IOException e) {
+      throw NetUtils.wrapException(url, destURI.port, "localhost", 0, e)
+    }
 
     def body = get.responseBodyAsString
-    if (!(resultCode >= 200 && resultCode < 400)) {
-      def message = "Request to $url failed with exit code $resultCode, body length ${body?.length()}:\n$body"
-      log.error(message)
-      fail(message)
-    }
+
+    uprateFaults("GET", url, resultCode, body)
     return body;
+  }
+
+  /**
+   * Generate exceptions from error codes >= 400. Some are converted
+   * into specific exceptions.
+   * @param verb HTTP verb
+   * @param url URL
+   * @param resultCode result code
+   * @param body any body
+   * @throws NotFoundException 404 received
+   * @throws ForbiddenException 401 received
+   * @throws IOException any other exit code
+   */
+  public static void uprateFaults(
+      String verb,
+      String url,
+      int resultCode,
+      String body) {
+
+    if (resultCode == 404) {
+      throw new NotFoundException(url);
+    }
+    if (resultCode == 401) {
+      throw new ForbiddenException(url);
+    }
+    if (!(resultCode >= 200 && resultCode < 400)) {
+      String bodyDetails = (body == null ?
+                            "(no body)"  :
+                            "body length ${body?.length()}:\n:$body")
+      String message = "$verb to $url failed with exit code $resultCode; $bodyDetails"
+
+      log.error(message);
+      throw new IOException(message);
+    }
+  }
+
+  /**
+   * Fetches a web page asserting that the response code is between 200 and 400.
+   * Will error on 400 and 500 series response codes and let 200 and 300 through.
+   * <p>
+   * if security is enabled, this uses SPNEGO to auth
+   * @param page
+   * @return body of response
+   */
+  public static String getWebPage(String base, String path) {
+    String s = appendToURL(base, path)
+    return getWebPage(s)
+  }
+
+  /**
+   * Execute any operation provided as a closure which returns a string, swallowing exceptions until
+   * eventually they time out.
+   * 
+   * @param timeout
+   * @param operation
+   * @return
+   */
+  public static String execOperation(int timeout, Closure operation) {
+    Duration duration = new Duration(timeout).start()
+    Exception ex = new IOException("limit exceeded before starting");
+    while (!duration.limitExceeded) {
+      try {
+        String result = operation();
+        return result;
+      } catch (Exception e) {
+        ex = e;
+        sleep(1000)
+      }
+    }
+    // timeout
+    throw ex;
+  } 
+
+  /**
+  * Static factory for URL connections
+   */
+  static UrlConnectionOperations connectionOperations
+  static UgiJerseyBinding jerseyBinding;
+
+  /**
+   * Static initializer of the connection operations
+   * @param conf config
+   */
+  public static synchronized void initHttpTestSupport(Configuration conf) {
+    connectionOperations = new UrlConnectionOperations(conf);
+    jerseyBinding = new UgiJerseyBinding(connectionOperations)
+  }
+
+  /**
+   * Check for the HTTP support being initialized
+   */
+  public static synchronized void assertHttpSupportInitialized() {
+    assert connectionOperations 
+    assert jerseyBinding 
+  }
+  
+  /**
+   * Create Jersey client with UGI integration
+   * @return
+   */
+  public static Client createUGIJerseyClient() {
+    assertHttpSupportInitialized()
+    ClientConfig clientConfig = createJerseyClientConfig()
+    return new Client(jerseyBinding.handler, clientConfig);
+  }
+
+  /**
+   * Create Jersey client with URL handling by way
+   * of the java.net classes. This DOES NOT have any SPNEGO
+   * integration. If used to query a secure cluster via the
+   * RM Proxy, it MUST fail.
+   * @return a basic Jersey client
+   */
+  public static Client createBasicJerseyClient() {
+    ClientConfig clientConfig = createJerseyClientConfig()
+    return new Client(new URLConnectionClientHandler(),
+        clientConfig);
+  }
+
+  /**
+   * Create a jersey client config with the settings needed for tests
+   * (e.g. POJO mappings)
+   * @return a client config
+   */
+  public static ClientConfig createJerseyClientConfig() {
+    ClientConfig clientConfig = new DefaultClientConfig();
+    clientConfig.features[JSONConfiguration.FEATURE_POJO_MAPPING] = Boolean.TRUE;
+    return clientConfig
+  }
+
+  /**
+   * Fetches a web page asserting that the response code is between 200 and 400.
+   * Will error on 400 and 500 series response codes and let 200 and 300 through.
+   * 
+   * if security is enabled, this uses SPNEGO to auth
+   * <p>
+   *   Relies on {@link #initHttpTestSupport(org.apache.hadoop.conf.Configuration)} 
+   *   to have been called.
+   *   
+   * @param path path to page
+   * @return body of response
+   */
+  public static String getWebPage(String path) {
+    HttpOperationResponse outcome = executeGet(path)
+    return new String(outcome.data);
+  }
+
+  /**
+   * Execute a GET operation
+   * @param path path to GET
+   * @return the response
+   */
+  public static HttpOperationResponse executeGet(String path) {
+    assert path
+    assertHttpSupportInitialized()
+
+    log.info("Fetching HTTP content at $path");
+    URL url = new URL(path)
+    def outcome = connectionOperations.execGet(url)
+    return outcome
+  }
+
+  /**
+   * Assert that a connection is not caching by looking at the headers
+   * @param conn connection to examine
+   */
+  public static void assertConnectionNotCaching(HttpURLConnection conn) {
+    assert conn.expiration <= conn.date
+    assert conn.getHeaderField(HttpHeaders.CACHE_CONTROL) ==
+           HttpCacheHeaders.HTTP_HEADER_CACHE_CONTROL_NONE
+    assert conn.getHeaderField(HttpCacheHeaders.HTTP_HEADER_PRAGMA) ==
+           HttpCacheHeaders.HTTP_HEADER_CACHE_CONTROL_NONE
   }
 
   /**
@@ -505,8 +766,7 @@ class SliderTestUtils extends Assert {
     log.info("Asserting component $component expected count $expected}",)
     int actual = extractLiveContainerCount(clusterDescription, component)
     if (expected != actual) {
-      log.warn(
-          "$component actual=$actual, expected $expected in \n$clusterDescription")
+      log.warn("$component actual=$actual, expected $expected in \n$clusterDescription")
     }
     assert expected == actual
   }
@@ -572,6 +832,150 @@ class SliderTestUtils extends Assert {
   }
 
   /**
+   * Exec a set of commands, wait a few seconds for it to finish.
+   * @param status code
+   * @param commands
+   * @return the process
+   */
+  public static ForkedProcessService exec(int status, List<String> commands) {
+    ForkedProcessService process = exec(commands)
+
+    def exitCode = process.exitCode
+    assert exitCode != null
+    assert status == exitCode
+    return process
+  }
+
+  /**
+   * Exec a set of commands, wait a few seconds for it to finish.
+   * @param commands
+   * @return
+   */
+  public static ForkedProcessService exec(List<String> commands) {
+    ForkedProcessService process;
+    process = new ForkedProcessService(
+        commands[0],
+        [:],
+        commands);
+    process.init(new Configuration());
+    process.start();
+    int timeoutMillis = 5000
+    if (!process.waitForServiceToStop(timeoutMillis)) {
+      throw new TimeoutException(
+          "Process did not stop in " + timeoutMillis + "mS");
+    }
+    process
+  }
+
+  /**
+   * Does an application exist? Run the commands and if the
+   * operation fails with a FileNotFoundException, then
+   * this method returns false.
+   * <p>
+   *   Run something harmless like a -version command, something
+   *   which must return 0
+   *   
+   * @param commands
+   * @return true if the command sequence succeeded
+   * false if they failed with no file
+   * @throws Exception on any other failure cause
+   */
+  public static boolean doesAppExist(List<String> commands) {
+    try {
+      exec(0, commands)
+      return true;
+    } catch (ServiceStateException e) {
+      if (!(e.cause instanceof FileNotFoundException)) {
+        throw e;
+      }
+      return false;
+    }
+  }
+
+  /**
+   * Locate an executable on the path
+   * @param exe executable name. If it is an absolute path which
+   * exists then it will returned direct
+   * @return the path to an exe or null for no match
+   */
+  public static File locateExecutable(String exe) {
+    File exeNameAsPath = new File(exe).absoluteFile
+    if (exeNameAsPath.exists()) {
+      return exeNameAsPath
+    }
+    
+    File exepath = null
+    String path = extractPath()
+    String[] dirs = path.split(System.getProperty("path.separator"));
+    dirs.each { String dirname ->
+      File dir = new File(dirname)
+
+      File possible = new File(dir, exe)
+      if (possible.exists()) {
+        exepath = possible
+      }
+    }
+    return exepath
+  }
+
+  /**
+   * Lookup the PATH env var
+   * @return the path or null
+   */
+  public static String extractPath() {
+    return extractEnvVar("PATH")
+  }
+  
+  /**
+   * Find an environment variable. Uses case independent checking for
+   * the benefit of windows.
+   * Will fail if the var is not found.
+   * @param var path variable <i>in upper case</i>
+   * @return the env var
+   */
+  public static String extractEnvVar(String var) {
+    String realkey = "";
+
+    System.getenv().keySet().each { String it ->
+      if (it.toUpperCase(Locale.ENGLISH).equals(var)) {
+        realkey = it;
+      }
+    }
+
+    if (!realkey) {
+      fail("No environment variable $var found")
+    }
+    assert realkey
+    def val = System.getenv(realkey)
+    
+    log.info("$realkey = $val")
+    return val
+  }
+  /**
+   * Create a temp JSON file. After coming up with the name, the file
+   * is deleted
+   * @return the filename
+   */
+  public static  File createTempJsonFile() {
+    return tmpFile(".json")
+  }
+
+  /**
+   * Create a temp file with the specific name. It's deleted after creation,
+   * to avoid  "file exists exceptions"
+   * @param suffix suffix, e.g. ".txt"
+   * @return a path to a file which may be created
+   */
+  public static File tmpFile(String suffix) {
+    File reportFile = File.createTempFile(
+        "temp",
+        suffix,
+        new File("target"))
+    reportFile.delete()
+    return reportFile
+  }
+
+  /**
    * Execute a closure, assert it fails with a given exit code and text
    * @param exitCode exit code
    * @param text text (can be "")
@@ -618,15 +1022,15 @@ class SliderTestUtils extends Assert {
       int exitCode,
       String text = "") {
     if (exitCode != ex.exitCode) {
-      log.warn(
-          "Wrong exit code, expected $exitCode but got $ex.exitCode in $ex",
-          ex)
-      assert exitCode == ex.exitCode
+      def message = "Wrong exit code, expected $exitCode but got $ex.exitCode in $ex"
+      log.warn(message, ex)
+      throw new AssertionError(message, ex)
     }
     if (text) {
       if (!(ex.toString().contains(text))) {
-        log.warn("String match for \"${text}\"failed in $ex", ex)
-        assert ex.toString().contains(text);
+        def message = "String match for \"${text}\"failed in $ex"
+        log.warn(message, ex)
+        throw new AssertionError(message, ex)
       }
     }
   }
@@ -674,7 +1078,9 @@ class SliderTestUtils extends Assert {
       Throwable {
     ServiceLauncher serviceLauncher =
         new ServiceLauncher(serviceClass.name);
-    log.debug("slider ${SliderUtils.join(args, " ", false)}")
+
+    def joinedArgs = SliderUtils.join(args, " ", false)
+    log.debug("slider ${joinedArgs}")
 
     serviceLauncher.launchService(conf,
         toArray(args),
@@ -689,10 +1095,10 @@ class SliderTestUtils extends Assert {
   throws Throwable {
     try {
       ServiceLauncher launch = launch(serviceClass, conf, args);
-      throw new AssertionError(
-          "Expected an exception with text containing " + expectedText
-              + " -but the service completed with exit code "
-              + launch.serviceExitCode);
+      throw new AssertionError("Expected an exception with text containing $expectedText "+
+               " -but the service completed with exit code ${launch.serviceExitCode}");
+    } catch (AssertionError error) {
+      throw error;
     } catch (Throwable thrown) {
       if (expectedText && !thrown.toString().contains(expectedText)) {
         //not the right exception -rethrow
@@ -984,7 +1390,11 @@ class SliderTestUtils extends Assert {
     if (timeout < 1000) {
       fail("Timeout $timeout too low: milliseconds are expected, not seconds")
     }
+<<<<<<< HEAD
     int attemptCount = 0
+=======
+    int attemptCount = 1
+>>>>>>> refs/remotes/apache/develop
     boolean succeeded = false;
     boolean completed = false;
     Duration duration = new Duration(timeout)
@@ -1023,4 +1433,178 @@ class SliderTestUtils extends Assert {
     }
   }
 
+  /**
+   * Get a value from a map; raise an assertion if it is not there
+   * @param map map to look up
+   * @param key key
+   * @return the string value
+   */
+  String requiredMapValue(Map map, String key) {
+    assert map[key] != null
+    map[key].toString()
+  }
+
+  /**
+   * Get a web page and deserialize the supplied JSON into
+   * an instance of the specific class.
+   * @param clazz class to deserialize to
+   * @param appmaster URL to base AM
+   * @param subpath subpath under AM
+   * @return the parsed data type
+   */
+  public <T> T fetchType(
+      Class<T> clazz, String appmaster, String subpath) {
+
+    def json = getWebPage(
+        appmaster,
+        RestPaths.SLIDER_PATH_APPLICATION + subpath)
+    return (T) deser(clazz, json);
+  }
+
+  public <T> T deser(Class<T> clazz, String json) {
+    JsonSerDeser serDeser = new JsonSerDeser(clazz)
+    T ctree = (T) serDeser.fromJson(json)
+    return ctree
+  }
+
+  public <T> T deser(Class<T> clazz, byte[] data) {
+    JsonSerDeser serDeser = new JsonSerDeser(clazz)
+    T ctree = (T) serDeser.fromBytes(data)
+    return ctree
+  }
+  
+  public ConfTreeOperations fetchConfigTree(
+      String appmaster, String subpath) {
+    ConfTree ctree = fetchType(ConfTree, appmaster, subpath)
+    ConfTreeOperations tree = new ConfTreeOperations(ctree)
+    return tree
+  }
+
+  /**
+   * Fetch a list of URLs, all of which must be of the same type
+   * @param clazz class of resolved values
+   * @param appmaster URL to app master
+   * @param subpaths list of subpaths
+   * @return a map of paths to values
+   */
+  public <T> Map<String, T> fetchTypeList(
+      Class<T> clazz, String appmaster, List<String> subpaths
+      ) {
+    Map < String, T > results = [:]
+    subpaths.each { String it ->
+      results[it] = (fetchType(clazz, appmaster, it))
+    }
+    return results;
+  }
+
+  /**
+   * Assert that a path resolves to an array list that contains
+   * those entries (and only those entries) expected
+   * @param appmaster AM ref
+   * @param path path under AM
+   * @param entries entries to assert the presence of
+   */
+  public void assertPathServesList(
+      String appmaster,
+      String path,
+      List<String> entries) {
+    def list = fetchType(ArrayList, appmaster, path)
+    assert list.size() == entries.size()
+    assert entries.containsAll(list)
+  }
+
+  public Map parseMetrics(String metrics) {
+    new JsonSlurper().parse(metrics.bytes) as Map
+  }
+
+  public void validateCodahaleJson(Map metricsMap) {
+    assert metricsMap["version"] == "3.0.0"
+    assert metricsMap["gauges"] instanceof Map
+    assert metricsMap["histograms"] instanceof Map
+    assert metricsMap["timers"] instanceof Map
+  }
+
+  public int getGaugeValue(Map metricsMap, String gauge, int defVal) {
+    def entry = metricsMap["gauges"][gauge]
+    if (entry != null) {
+      return entry["value"] as int
+    } else {
+      return defVal
+    }
+  }
+
+  public boolean getGaugeAsBool(Map metricsMap, String gauge, boolean defVal) {
+    return 0 !=  getGaugeValue(metricsMap, gauge, defVal ? 1 : 0)
+  }
+
+  /**
+   * Fetch and parse the JSON codahale metrics under a path
+   * @param baseUrl base path
+   * @return the fetch, parsed and partially validated JSON mapping
+   */
+  public Map getMetrics(String baseUrl) {
+    def raw = GET(baseUrl, SYSTEM_METRICS_JSON)
+    def metrics = parseMetrics(raw)
+    validateCodahaleJson(metrics)
+    return metrics;
+  }
+
+  /**
+   * Await a specific gauge being of the desired value
+   * @param am URL of appmaster
+   * @param gauge gauge name
+   * @param desiredValue desired value
+   * @param timeout timeout in millis
+   * @param sleepDur sleep in millis
+   */
+  public void awaitGaugeValue(String am, String gauge, int desiredValue,
+      int timeout,
+      int sleepDur) {
+    String target = appendToURL(am, SYSTEM_METRICS_JSON)
+    def text = "Probe $target for gauge $gauge == $desiredValue"
+    repeatUntilSuccess(text,
+      this.&probeMetricGaugeValue,
+      timeout, sleepDur,
+      [
+          url : target,
+          gauge: gauge,
+          desiredValue: desiredValue.toString()
+      ],
+      true, text) {
+       log.error(prettyPrintJson(GET(target)))
+    }
+  }
+
+  /**
+   * Probe for a metric gauge holding a value.
+   *
+   * Keys: "url:String", "gauge:String", "desiredValue:int"
+   * @param args argument map
+   * @return success on the desired value, retry if not; fail on IOE
+   */
+  Outcome probeMetricGaugeValue(Map args) {
+    String url = requiredMapValue(args, "url")
+    String gauge = requiredMapValue(args, "gauge")
+    String vstr = requiredMapValue(args, "desiredValue")
+    assert vstr != null, "null desired value in $args"
+    assert vstr != "", "empty desired value in $args"
+    int desiredValue = Integer.decode(vstr)
+    try {
+      def metrics = parseMetrics(GET(url))
+      def gaugeValue = getGaugeValue(metrics, gauge, -1)
+      return gaugeValue == desiredValue ? Outcome.Success : Outcome.Retry
+    } catch (IOException e) {
+      return Outcome.Fail
+    }
+  }
+
+  public static void assertStringContains(String expected, String text) {
+    assertNotNull("null text", text)
+    if (!text.contains(expected)) {
+      def message = "id not find $expected in \"$text\""
+      log.error(message)
+      fail(message)
+    }
+
+  }
 }

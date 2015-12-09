@@ -21,6 +21,9 @@ package org.apache.slider.core.launch;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.security.SecurityUtil;
+import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.security.token.TokenIdentifier;
+import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.Priority;
@@ -37,6 +40,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.text.DateFormat;
+import java.util.Date;
 import java.util.Map;
 import java.util.Set;
 
@@ -63,12 +68,10 @@ public class AppMasterLauncher extends AbstractLauncher {
   /**
    * Build the AM Launcher
    * @param name app name
-   * @param type applicatin type
+   * @param type application type
    * @param conf hadoop config
    * @param fs filesystem binding
    * @param yarnClient yarn client
-   * @param secureCluster is the cluster secure?
-   * -the map is not retained.
    * @param secureCluster flag to indicate secure cluster
    * @param options map of options. All values are extracted in this constructor only
    * @param resourceGlobalOptions global options
@@ -103,6 +106,8 @@ public class AppMasterLauncher extends AbstractLauncher {
       submissionContext.setApplicationTags(applicationTags);
     }
     submissionContext.setNodeLabelExpression(extractLabelExpression(options));
+
+    extractAmRetryCount(submissionContext, resourceGlobalOptions);
     extractResourceRequirements(resource, options);
     extractLogAggregationContext(resourceGlobalOptions);
   }
@@ -216,10 +221,32 @@ public class AppMasterLauncher extends AbstractLauncher {
       );
     }
 
-    // For now, only getting tokens for the default file-system.
-    FileSystem fs = coreFileSystem.getFileSystem();
-    fs.addDelegationTokens(tokenRenewer, credentials);
-  }
+    Token<? extends TokenIdentifier>[] tokens = null;
+    boolean tokensProvided = getConf().get(MAPREDUCE_JOB_CREDENTIALS_BINARY) != null;
+    if (!tokensProvided) {
+        // For now, only getting tokens for the default file-system.
+        FileSystem fs = coreFileSystem.getFileSystem();
+        tokens = fs.addDelegationTokens(tokenRenewer, credentials);
+    }
+    // obtain the token expiry from the first token - should be the same for all
+    // HDFS tokens
+    if (tokens != null && tokens.length > 0) {
+      AbstractDelegationTokenIdentifier id =
+        (AbstractDelegationTokenIdentifier)tokens[0].decodeIdentifier();
+      Date d = new Date(id.getIssueDate() + 24 * 60 * 60 * 1000);
+      log.info("HDFS delegation tokens for AM launch context require renewal by {}",
+               DateFormat.getDateTimeInstance().format(d));
+    } else {
+      if (!tokensProvided) {
+        log.warn("No HDFS delegation tokens obtained for AM launch context");
+      } else {
+        log.info("Tokens provided via "+ MAPREDUCE_JOB_CREDENTIALS_BINARY +" property "
+                 + "being used for AM launch");
+      }
+
+    }
+
+   }
 
   /**
    * Submit the application. 

@@ -20,21 +20,27 @@ package org.apache.slider.server.appmaster.model.appstate
 
 import groovy.transform.CompileStatic
 import groovy.util.logging.Slf4j
+<<<<<<< HEAD
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records.ContainerId
 import org.apache.slider.api.ResourceKeys
+=======
+import org.apache.slider.api.ResourceKeys
+import org.apache.slider.core.conf.AggregateConf
+>>>>>>> refs/remotes/apache/develop
 import org.apache.slider.providers.PlacementPolicy
 import org.apache.slider.server.appmaster.model.mock.BaseMockAppStateTest
-import org.apache.slider.server.appmaster.model.mock.MockAppState
 import org.apache.slider.server.appmaster.model.mock.MockRoles
 import org.apache.slider.server.appmaster.model.mock.MockYarnEngine
 import org.apache.slider.server.appmaster.operations.AbstractRMOperation
 import org.apache.slider.server.appmaster.operations.ContainerRequestOperation
+<<<<<<< HEAD
 import org.apache.slider.server.appmaster.state.AppState
+=======
+>>>>>>> refs/remotes/apache/develop
 import org.apache.slider.server.appmaster.state.ContainerPriority
 import org.apache.slider.server.appmaster.state.RoleHistoryUtils
 import org.apache.slider.server.appmaster.state.RoleInstance
-import org.apache.slider.server.appmaster.state.SimpleReleaseSelector
 import org.junit.Test
 
 /**
@@ -65,6 +71,7 @@ class TestMockAppStateDynamicRoles extends BaseMockAppStateTest
   }
 
   @Override
+<<<<<<< HEAD
   void initApp() {
     super.initApp()
     appState = new MockAppState()
@@ -73,10 +80,17 @@ class TestMockAppStateDynamicRoles extends BaseMockAppStateTest
 
     def opts = [
         (ResourceKeys.COMPONENT_PRIORITY): ROLE4,
+=======
+  AggregateConf buildInstanceDefinition() {
+    def instance = factory.newInstanceDefinition(0, 0, 0)
+    def opts = [
+        (ResourceKeys.COMPONENT_PRIORITY) : ROLE4,
+>>>>>>> refs/remotes/apache/develop
         (ResourceKeys.COMPONENT_INSTANCES): "1",
     ]
 
 
+<<<<<<< HEAD
     instance.resourceOperations.components[ROLE4]= opts
 
     def opts5 = [
@@ -97,6 +111,21 @@ class TestMockAppStateDynamicRoles extends BaseMockAppStateTest
         historyPath,
         null,
         null, new SimpleReleaseSelector())
+=======
+    instance.resourceOperations.components[ROLE4] = opts
+
+    def opts5 = [
+        (ResourceKeys.COMPONENT_PRIORITY)        : ROLE5,
+        (ResourceKeys.COMPONENT_INSTANCES)       : "1",
+        (ResourceKeys.COMPONENT_PLACEMENT_POLICY):
+            Integer.toString(PlacementPolicy.STRICT),
+        (ResourceKeys.NODE_FAILURE_THRESHOLD)    :
+            Integer.toString(2),
+    ]
+
+    instance.resourceOperations.components[ROLE5] = opts5
+    instance
+>>>>>>> refs/remotes/apache/develop
   }
 
   @Test
@@ -113,6 +142,7 @@ class TestMockAppStateDynamicRoles extends BaseMockAppStateTest
    * @param actions source list
    * @return found list
    */
+<<<<<<< HEAD
   List<ContainerRequestOperation> findAllocationsForRole(int role, 
       List<AbstractRMOperation> actions) {
     List <ContainerRequestOperation > results = []
@@ -128,6 +158,18 @@ class TestMockAppStateDynamicRoles extends BaseMockAppStateTest
     return results
   } 
   
+=======
+  Collection<ContainerRequestOperation> findAllocationsForRole(int role,
+      List<AbstractRMOperation> actions) {
+    def requests = actions.findAll {
+      it instanceof ContainerRequestOperation}.collect {it as ContainerRequestOperation}
+
+    requests.findAll {
+        role == ContainerPriority.extractRole(it.request.priority)
+    }
+  }
+
+>>>>>>> refs/remotes/apache/develop
   @Test
   public void testStrictPlacementInitialRequest() throws Throwable {
     log.info("Initial engine state = $engine")
@@ -139,7 +181,10 @@ class TestMockAppStateDynamicRoles extends BaseMockAppStateTest
     assertRelaxLocalityFlag(ID5, null, true, actions)
   }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> refs/remotes/apache/develop
   @Test
   public void testPolicyPropagation() throws Throwable {
     assert !(appState.lookupRoleStatus(ROLE4).placementPolicy & PlacementPolicy.STRICT)
@@ -148,6 +193,15 @@ class TestMockAppStateDynamicRoles extends BaseMockAppStateTest
   }
 
   @Test
+<<<<<<< HEAD
+=======
+  public void testNodeFailureThresholdPropagation() throws Throwable {
+    assert (appState.lookupRoleStatus(ROLE4).nodeFailureThreshold == 3)
+    assert (appState.lookupRoleStatus(ROLE5).nodeFailureThreshold == 2)
+  }
+
+  @Test
+>>>>>>> refs/remotes/apache/develop
   public void testLaxPlacementSecondRequestRole4() throws Throwable {
     log.info("Initial engine state = $engine")
     def role4 = appState.lookupRoleStatus(ROLE4)
@@ -159,12 +213,19 @@ class TestMockAppStateDynamicRoles extends BaseMockAppStateTest
     assert instances.size() == 1
 
     def instanceA = instances.find { RoleInstance instance ->
+<<<<<<< HEAD
       instance.roleId = ID4
+=======
+      instance.roleId == ID4
+>>>>>>> refs/remotes/apache/develop
     }
     assert instanceA
     def hostname = RoleHistoryUtils.hostnameOf(instanceA.container)
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> refs/remotes/apache/develop
     log.info("Allocated engine state = $engine")
     assert engine.containerCount() == 1
 
@@ -174,8 +235,12 @@ class TestMockAppStateDynamicRoles extends BaseMockAppStateTest
     role4.desired = 0
     appState.lookupRoleStatus(ROLE4).desired = 0
     def completionResults = []
+<<<<<<< HEAD
     def containersToRelease = []
     instances = createStartAndStopNodes(completionResults)
+=======
+    createStartAndStopNodes(completionResults)
+>>>>>>> refs/remotes/apache/develop
     assert engine.containerCount() == 0
     assert completionResults.size() == 1
 
@@ -184,7 +249,10 @@ class TestMockAppStateDynamicRoles extends BaseMockAppStateTest
     def actions = appState.reviewRequestAndReleaseNodes()
     assert actions.size() == 1
 
+<<<<<<< HEAD
     assertRelaxLocalityFlag(ID4, "", true, actions)
+=======
+>>>>>>> refs/remotes/apache/develop
     ContainerRequestOperation cro = (ContainerRequestOperation) actions[0]
     def nodes = cro.request.nodes
     assert nodes.size() == 1
@@ -207,19 +275,30 @@ class TestMockAppStateDynamicRoles extends BaseMockAppStateTest
     }
     assert instanceA
     def hostname = RoleHistoryUtils.hostnameOf(instanceA.container)
+<<<<<<< HEAD
     
 
+=======
+>>>>>>> refs/remotes/apache/develop
 
     log.info("Allocated engine state = $engine")
     assert engine.containerCount() == 1
 
     assert role5.actual == 1
+<<<<<<< HEAD
     // shrinking cluster
 
     role5.desired = 0
     def completionResults = []
     def containersToRelease = []
     instances = createStartAndStopNodes(completionResults)
+=======
+
+    // shrinking cluster
+    role5.desired = 0
+    def completionResults = []
+    createStartAndStopNodes(completionResults)
+>>>>>>> refs/remotes/apache/develop
     assert engine.containerCount() == 0
     assert completionResults.size() == 1
     assert role5.actual == 0
@@ -232,16 +311,27 @@ class TestMockAppStateDynamicRoles extends BaseMockAppStateTest
     def nodes = cro.request.nodes
     assert nodes.size() == 1
     assert hostname == nodes[0]
+<<<<<<< HEAD
     
   }
 
   public void assertRelaxLocalityFlag(
       int id,
+=======
+  }
+
+  public void assertRelaxLocalityFlag(
+      int role,
+>>>>>>> refs/remotes/apache/develop
       String expectedHost,
       boolean expectedRelaxFlag,
       List<AbstractRMOperation> actions) {
     def requests
+<<<<<<< HEAD
     requests = findAllocationsForRole(id, actions)
+=======
+    requests = findAllocationsForRole(role, actions)
+>>>>>>> refs/remotes/apache/develop
     assert requests.size() == 1
     def req = requests[0]
     assert expectedRelaxFlag == req.request.relaxLocality

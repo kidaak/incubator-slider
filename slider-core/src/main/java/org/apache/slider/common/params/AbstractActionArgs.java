@@ -56,7 +56,7 @@ public abstract class AbstractActionArgs extends ArgOps implements Arguments {
    * This is the default parameter
    */
   @Parameter
-  public final List<String> parameters = new ArrayList<String>();
+  public final List<String> parameters = new ArrayList<>();
 
   /**
    * get the name: relies on arg 1 being the cluster name in all operations 
@@ -77,7 +77,7 @@ public abstract class AbstractActionArgs extends ArgOps implements Arguments {
    */
 
   @Parameter(names = ARG_DEFINE, arity = 1, description = "Definitions")
-  public final List<String> definitions = new ArrayList<String>();
+  public final List<String> definitions = new ArrayList<>();
 
   /**
    * System properties
@@ -85,7 +85,7 @@ public abstract class AbstractActionArgs extends ArgOps implements Arguments {
   @Parameter(names = {ARG_SYSPROP}, arity = 1,
              description = "system properties in the form name value" +
                            " These are set after the JVM is started.")
-  public final List<String> sysprops = new ArrayList<String>(0);
+  public final List<String> sysprops = new ArrayList<>(0);
 
 
   @Parameter(names = {ARG_MANAGER_SHORT, ARG_MANAGER},
@@ -96,6 +96,8 @@ public abstract class AbstractActionArgs extends ArgOps implements Arguments {
   @Parameter(names = ARG_DEBUG, description = "Debug mode")
   public boolean debug = false;
 
+  @Parameter(names = {ARG_HELP}, description = "Help", help = true)
+  public boolean help = false;
 
   /**
    * Get the min #of params expected
@@ -133,14 +135,16 @@ public abstract class AbstractActionArgs extends ArgOps implements Arguments {
       maxArgs = minArgs;
     }
     if (actionArgSize > maxArgs) {
-      String message = String.format("%s for action %s: limit is %d but saw %d",
+      String message = String.format("%s for action %s: limit is %d but saw %d: ",
                                      ErrorStrings.ERROR_TOO_MANY_ARGUMENTS,
                                      getActionName(), maxArgs,
                                      actionArgSize);
+      
       log.error(message);
       int index = 1;
       for (String actionArg : parameters) {
         log.error("[{}] \"{}\"", index++, actionArg);
+        message += " \"" + actionArg + "\" ";
       }
       throw new BadCommandArgumentsException(message);
     }

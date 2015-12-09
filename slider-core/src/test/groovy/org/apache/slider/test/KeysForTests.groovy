@@ -18,12 +18,14 @@
 
 package org.apache.slider.test
 
+import groovy.transform.CompileStatic
 import org.apache.slider.common.SliderKeys
 import org.apache.slider.common.SliderXMLConfKeysForTesting
 
 /**
  * Keys shared across tests
  */
+@CompileStatic
 public interface KeysForTests extends SliderKeys, SliderXMLConfKeysForTesting {
   /**
    * Username for all clusters, ZK, etc
@@ -31,7 +33,9 @@ public interface KeysForTests extends SliderKeys, SliderXMLConfKeysForTesting {
   String USERNAME = "bigdataborat"
 
   int WAIT_TIME = 120;
-  String WAIT_TIME_ARG = WAIT_TIME.toString()
+  String WAIT_TIME_ARG =  Integer.toString(WAIT_TIME)
 
   String SLIDER_TEST_XML = "slider-test.xml"
+
+  String NODES_UPDATED_FLAG_METRIC = "org.apache.slider.server.appmaster.state.RoleHistory.nodes-updated.flag"
 }

@@ -44,10 +44,12 @@ public class SecurityUtils {
   private static final Logger LOG =
       LoggerFactory.getLogger(SecurityUtils.class);
 
-  private static String CA_CONFIG_CONTENTS ="[ ca ]\n"
+  private static String CA_CONFIG_CONTENTS =  "HOME            = .\n"
+                                            + "RANDFILE        = $ENV::HOME/.rnd\n\n"
+                                            + "[ ca ]\n"
                                             + "default_ca             = CA_CLIENT\n"
                                             + "[ CA_CLIENT ]\n"
-                                            + "dir\t\t       = ${SEC_DIR}/db\n"
+                                            + "dir                    = ${SEC_DIR}/db\n"
                                             + "certs                  = $dir/certs\n"
                                             + "new_certs_dir          = $dir/newcerts\n"
                                             + "\n"
@@ -62,17 +64,22 @@ public class SecurityUtils {
                                             + "\n"
                                             + "[ policy_anything ]\n"
                                             + "countryName            = optional\n"
-                                            + "stateOrProvinceName    = optional \n"
+                                            + "stateOrProvinceName    = optional\n"
                                             + "localityName           = optional\n"
                                             + "organizationName       = optional\n"
                                             + "organizationalUnitName = optional\n"
-                                            + "commonName             = optional   \n"
-                                            + "emailAddress           = optional       \n"
+                                            + "commonName             = optional\n"
+                                            + "emailAddress           = optional\n"
+                                            + "\n"
+                                            + "[req]\n"
+                                            + "distinguished_name     = req_distinguished_name\n"
+                                            + "\n"
+                                            + "[ req_distinguished_name ]\n"
                                             + "\n"
                                             + "[ jdk7_ca ]\n"
                                             + "subjectKeyIdentifier = hash\n"
                                             + "authorityKeyIdentifier = keyid:always,issuer:always\n"
-                                            + "basicConstraints = CA:true";
+                                            + "basicConstraints = CA:true\n";
 
   private static final String PASS_TOKEN = "pass:";
   private static String keystorePass;
@@ -88,9 +95,14 @@ public class SecurityUtils {
   }
 
   public static String hideOpenSslPassword(String command){
-    int start = command.indexOf(PASS_TOKEN)+PASS_TOKEN.length();
-    CharSequence cs = command.subSequence(start, command.indexOf(" ", start));
-    return command.replace(cs, "****");
+    int start = command.indexOf(PASS_TOKEN);
+    while (start >= 0) {
+      start += PASS_TOKEN.length();
+      CharSequence cs = command.subSequence(start, command.indexOf(" ", start));
+      command = command.replace(cs, "****");
+      start = command.indexOf(PASS_TOKEN, start + 1);
+    }
+    return command;
   }
 
   public static String getOpenSslCommandResult(String command, int exitCode) {
@@ -139,7 +151,7 @@ public class SecurityUtils {
     return securityDir;
   }
 
-  public static void initializeSecurityParameters(MapOperations configMap) {
+  public static void    initializeSecurityParameters(MapOperations configMap) {
     initializeSecurityParameters(configMap, false);
   }
 
@@ -153,8 +165,9 @@ public class SecurityUtils {
       File dbDir = new File(secDirFile, "db");
       File newCertsDir = new File(dbDir, "newcerts");
       newCertsDir.mkdirs();
+      RawLocalFileSystem fileSystem = null;
       try {
-        RawLocalFileSystem fileSystem = new RawLocalFileSystem();
+        fileSystem = new RawLocalFileSystem();
         FsPermission permissions = new FsPermission(FsAction.ALL, FsAction.NONE,
                                                     FsAction.NONE);
         fileSystem.setPermission(new Path(dbDir.getAbsolutePath()),
@@ -164,11 +177,18 @@ public class SecurityUtils {
                                  permissions);
         File indexFile = new File(dbDir, "index.txt");
         indexFile.createNewFile();
-
         SecurityUtils.writeCaConfigFile(secDirFile.getAbsolutePath().replace('\\', '/'));
 
       } catch (IOException e) {
         LOG.error("Unable to create SSL configuration directories/files", e);
+      } finally {
+        if (fileSystem != null) {
+          try {
+            fileSystem.close();
+          } catch (IOException e) {
+            LOG.warn("Unable to close fileSystem", e);
+          }
+        }
       }
       // need to create the password
     }

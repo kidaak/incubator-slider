@@ -29,7 +29,6 @@ import org.apache.hadoop.yarn.webapp.hamlet.Hamlet.TABLE
 import org.apache.hadoop.yarn.webapp.hamlet.Hamlet.TR
 import org.apache.hadoop.yarn.webapp.hamlet.HamletImpl.EImp
 import org.apache.slider.api.ClusterNode
-import org.apache.slider.api.SliderClusterProtocol
 import org.apache.slider.providers.ProviderService
 import org.apache.slider.server.appmaster.model.mock.*
 import org.apache.slider.server.appmaster.state.ProviderAppState
@@ -43,7 +42,7 @@ import org.junit.Before
 import org.junit.Test
 
 @Slf4j
-@CompileStatic
+//@CompileStatic
 public class TestContainerStatsBlock extends BaseMockAppStateTest {
 
   private ContainerStatsBlock statsBlock;
@@ -53,26 +52,19 @@ public class TestContainerStatsBlock extends BaseMockAppStateTest {
 
   @Before
   public void setup() {
-    SliderClusterProtocol clusterProto = new MockSliderClusterProtocol();
+    super.setup()
     ProviderService providerService = new MockProviderService();
     ProviderAppState providerAppState = new ProviderAppState(
         "undefined",
         appState)
 
     WebAppApiImpl inst = new WebAppApiImpl(
-        clusterProto,
         providerAppState,
         providerService,
         null,
-        null);
+        null, metrics, null, null, null);
 
-    Injector injector = Guice.createInjector(new AbstractModule() {
-          @Override
-          protected void configure() {
-            bind(WebAppApi.class).toInstance(inst);
-          }
-        });
-
+    Injector injector = Guice.createInjector(new WebappModule(inst))
     statsBlock = injector.getInstance(ContainerStatsBlock.class);
 
     cont1 = new MockContainer();
@@ -89,6 +81,21 @@ public class TestContainerStatsBlock extends BaseMockAppStateTest {
     cont2.resource = new MockResource();
   }
 
+  
+  public static class WebappModule extends AbstractModule {
+    final WebAppApiImpl instance;
+
+    WebappModule(WebAppApiImpl instance) {
+      this.instance = instance
+    }
+
+    @Override
+    protected void configure() {
+      bind(WebAppApi.class).toInstance(instance);
+    }
+  }
+  
+  
   public MockContainerId mockContainerId(int count) {
     new MockContainerId(applicationAttemptId, count)
   }

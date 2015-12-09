@@ -24,6 +24,7 @@ import org.apache.slider.core.exceptions.TriggerClusterTeardownException
 import org.apache.slider.server.appmaster.model.mock.BaseMockAppStateTest
 import org.apache.slider.server.appmaster.model.mock.MockRoles
 import org.apache.slider.server.appmaster.operations.AbstractRMOperation
+import org.apache.slider.server.appmaster.operations.CancelSingleRequest
 import org.apache.slider.server.appmaster.state.AppState
 import org.apache.slider.server.appmaster.state.ContainerAssignment
 import org.apache.slider.server.appmaster.state.RoleInstance
@@ -39,9 +40,19 @@ class TestMockAppStateFlexing extends BaseMockAppStateTest implements MockRoles 
 
   @Test
   public void testFlexDuringLaunchPhase() throws Throwable {
+    
+    // ask for one instance of role0
     role0Status.desired = 1
 
     List<AbstractRMOperation> ops = appState.reviewRequestAndReleaseNodes()
+    
+    // at this point there's now one request in the list
+    assert 1 == ops.size()
+    // and in a liveness check, one outstanding
+    def liveness = appState.applicationLivenessInformation
+    assert 1 == liveness.requestsOutstanding
+    assert !liveness.allRequestsSatisfied
+    
     List<Container> allocations = engine.execute(ops)
     List<ContainerAssignment> assignments = [];
     List<AbstractRMOperation> releases = []
@@ -54,13 +65,17 @@ class TestMockAppStateFlexing extends BaseMockAppStateTest implements MockRoles 
     ops = appState.reviewRequestAndReleaseNodes()
     assert ops.empty
 
+    liveness = appState.applicationLivenessInformation
+    assert 0 == liveness.requestsOutstanding
+    assert liveness.allRequestsSatisfied
+
     //now this is the start point.
     appState.containerStartSubmitted(target, ri);
 
     ops = appState.reviewRequestAndReleaseNodes()
     assert ops.empty
 
-    RoleInstance ri2 = appState.innerOnNodeManagerContainerStarted(target.id)
+    appState.innerOnNodeManagerContainerStarted(target.id)
   }
 
   @Test
@@ -69,8 +84,21 @@ class TestMockAppStateFlexing extends BaseMockAppStateTest implements MockRoles 
 
     List<AbstractRMOperation> ops = appState.reviewRequestAndReleaseNodes()
     assert !ops.empty
+
+    // second scan will find the first run outstanding, so not re-issue
+    // any more container requests
     List<AbstractRMOperation> ops2 = appState.reviewRequestAndReleaseNodes()
     assert ops2.empty
+
+    // and in a liveness check, one outstanding
+    def liveness = appState.applicationLivenessInformation
+    assert 1 == liveness.requestsOutstanding
+    assert !liveness.allRequestsSatisfied
+
+    appState.refreshClusterStatus(null)
+    def cd = appState.clusterStatus
+    assert 1 == cd.liveness.requestsOutstanding
+
   }
 
 
@@ -104,7 +132,7 @@ class TestMockAppStateFlexing extends BaseMockAppStateTest implements MockRoles 
     
     
     // now shrink again
-    role0Status.desired = r0 = 1
+    role0Status.desired = 1
     completionResults = []
     instances = createStartAndStopNodes(completionResults)
     assert instances.size() == 0
@@ -135,6 +163,23 @@ class TestMockAppStateFlexing extends BaseMockAppStateTest implements MockRoles 
     }
 
   }
-  
+
+  @Test
+  public void testCancelWithRequestsOutstanding() throws Throwable {
+    // flex cluster size before the original set were allocated
+
+
+    role0Status.desired = 6
+    // build the ops
+    List<AbstractRMOperation> ops = appState.reviewRequestAndReleaseNodes()
+    // here the data structures exist
+
+    // go down
+    role0Status.desired = 3
+    List<AbstractRMOperation> ops2 = appState.reviewRequestAndReleaseNodes()
+    assert ops2.size() == 3
+    ops2.each { assert it instanceof CancelSingleRequest}
+
+  }
   
 }

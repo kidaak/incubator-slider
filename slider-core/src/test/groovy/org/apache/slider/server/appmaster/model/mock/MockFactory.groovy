@@ -23,11 +23,14 @@ import groovy.util.logging.Slf4j
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId
 import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.hadoop.yarn.api.records.ContainerId
+import org.apache.hadoop.yarn.api.records.NodeId
+import org.apache.hadoop.yarn.api.records.Priority
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.slider.api.ClusterDescription
 import org.apache.slider.api.ResourceKeys
 import org.apache.slider.core.conf.AggregateConf
 import org.apache.slider.core.conf.ConfTree
+import org.apache.slider.providers.PlacementPolicy
 import org.apache.slider.providers.ProviderRole
 
 /**
@@ -37,15 +40,64 @@ import org.apache.slider.providers.ProviderRole
 @Slf4j
 class MockFactory implements MockRoles {
 
+  /*
+  Ignore any IDE hints about needless references to the ROLE values; groovyc fails without them.
+   */
+
+  /**
+   * basic role
+   */
   public static final ProviderRole PROVIDER_ROLE0 = new ProviderRole(
       MockRoles.ROLE0,
-      0)
+      0,
+      PlacementPolicy.DEFAULT,
+      2,
+      1,
+      ResourceKeys.DEF_YARN_LABEL_EXPRESSION)
+  /**
+   * role 1 is strict. timeout should be irrelevant; same as failures
+   */
   public static final ProviderRole PROVIDER_ROLE1 = new ProviderRole(
       MockRoles.ROLE1,
-      1)
+      1,
+      PlacementPolicy.STRICT,
+      2,
+      1,
+      ResourceKeys.DEF_YARN_LABEL_EXPRESSION)
+
+  /**
+   * role 2: longer delay
+   */
   public static final ProviderRole PROVIDER_ROLE2 = new ProviderRole(
       MockRoles.ROLE2,
-      2)
+      2,
+      PlacementPolicy.NO_DATA_LOCALITY,
+      2,
+      2,
+      ResourceKeys.DEF_YARN_LABEL_EXPRESSION)
+
+  /**
+   * Patch up a "role2" role to have anti-affinity set
+   */
+  public static final ProviderRole AAROLE_2 = new ProviderRole(
+      MockRoles.ROLE2,
+      2,
+      PlacementPolicy.ANTI_AFFINITY_REQUIRED,
+      2,
+      2,
+      null)
+
+  /**
+   * Patch up a "role1" role to have anti-affinity set and GPI as the label
+   */
+  public static final ProviderRole AAROLE_1_GPU = new ProviderRole(
+      MockRoles.ROLE1,
+      1,
+      PlacementPolicy.ANTI_AFFINITY_REQUIRED,
+      2,
+      1,
+      MockRoles.LABEL_GPU)
+
   int appIdCount;
   int attemptIdCount;
   int containerIdCount;
@@ -61,7 +113,7 @@ class MockFactory implements MockRoles {
       PROVIDER_ROLE1,
       PROVIDER_ROLE2,
   ]
-  
+
   public static final int ROLE_COUNT = ROLES.size();
 
   MockContainerId newContainerId() {
@@ -88,10 +140,10 @@ class MockFactory implements MockRoles {
     return id;
   }
 
-  MockNodeId newNodeId() {
-    MockNodeId nodeId = new MockNodeId()
+  MockNodeId newNodeId(String host = null) {
+    new MockNodeId(host: host)
   }
-  
+
   MockContainer newContainer(ContainerId cid) {
     MockContainer c = new MockContainer()
     c.id = cid
@@ -100,6 +152,13 @@ class MockFactory implements MockRoles {
 
   MockContainer newContainer() {
     newContainer(newContainerId())
+  }
+
+  MockContainer newContainer(NodeId nodeId, Priority priority) {
+    def container = newContainer(newContainerId())
+    container.nodeId = nodeId
+    container.priority = priority
+    container
   }
 
   /**
@@ -169,21 +228,18 @@ class MockFactory implements MockRoles {
     instance.setResources(newConfTree(r1, r2, r3))
     return instance
   }
-  
-  
-  
+
   def roleMap(int count) {
     return [
-        (ResourceKeys.COMPONENT_INSTANCES):count.toString()
+        (ResourceKeys.COMPONENT_INSTANCES): count.toString(),
     ]
   }
 
-  MockResource newResource() {
-    return new MockResource()
+  MockResource newResource(int memory = 0, int vcores = 0) {
+    return new MockResource(memory, vcores)
   }
 
   MockContainerStatus newContainerStatus() {
     return new MockContainerStatus()
-    
   }
 }

@@ -41,7 +41,7 @@ logger = logging.getLogger()
 IS_WINDOWS = platform.system() == "Windows"
 formatstr = "%(levelname)s %(asctime)s %(filename)s:%(lineno)d - %(message)s"
 agentPid = os.getpid()
-
+controller = None
 configFileRelPath = "infra/conf/agent.ini"
 logFileName = "slider-agent.log"
 
@@ -54,6 +54,11 @@ def signal_handler(signum, frame):
   if os.getpid() != agentPid:
     os._exit(0)
   logger.info('signal received, exiting.')
+  global controller
+  if controller is not None and hasattr(controller, 'actionQueue'):
+    docker_mode = controller.actionQueue.docker_mode
+    if docker_mode:
+      tmpdir = controller.actionQueue.dockerManager.stop_container()
   ProcessHelper.stopAgent()
 
 
@@ -113,6 +118,7 @@ def update_config_from_file(agentConfig):
   try:
     configFile = posixpath.join(agentConfig.getWorkRootPath(), configFileRelPath)
     if os.path.exists(configFile):
+      logger.info("Config file: " + configFile)
       agentConfig.setConfig(configFile)
     else:
       logger.warn("No config found, using default")
@@ -223,20 +229,19 @@ def main():
   if options.debug:
     agentConfig.set(AgentConfig.AGENT_SECTION, AgentConfig.APP_DBG_CMD, options.debug)
 
-  # set the security directory to a subdirectory of the run dir
+  logFile = posixpath.join(agentConfig.getResolvedPath(AgentConfig.LOG_DIR), logFileName)
+  setup_logging(options.verbose, logFile)
+  update_log_level(agentConfig, logFile)
+
   secDir = posixpath.join(agentConfig.getResolvedPath(AgentConfig.RUN_DIR), "security")
   logger.info("Security/Keys directory: " + secDir)
   agentConfig.set(AgentConfig.SECURITY_SECTION, "keysdir", secDir)
-
-  logFile = posixpath.join(agentConfig.getResolvedPath(AgentConfig.LOG_DIR), logFileName)
 
   perform_prestart_checks(agentConfig)
   ensure_folder_layout(agentConfig)
   # create security dir if necessary
   ensure_path_exists(secDir)
 
-  setup_logging(options.verbose, logFile)
-  update_log_level(agentConfig, logFile)
   write_pid()
 
   logger.info("Using AGENT_WORK_ROOT = " + options.root_folder)
@@ -285,8 +290,10 @@ def main():
   pass
 
   # Launch Controller communication
+  global controller
   controller = Controller(agentConfig)
   controller.start()
+  
   try:
     while controller.is_alive():
       controller.join(timeout=1.0)

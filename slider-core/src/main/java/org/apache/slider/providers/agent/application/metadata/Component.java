@@ -19,36 +19,35 @@ package org.apache.slider.providers.agent.application.metadata;
 import org.apache.slider.common.tools.SliderUtils;
 import org.apache.slider.core.exceptions.BadConfigException;
 import org.apache.slider.core.exceptions.SliderException;
-
+import org.codehaus.jackson.annotate.JsonProperty;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- *
+ * Component defined in master package metainfo.json
  */
-public class Component {
-  String name;
-  String category;
-  String publishConfig;
-  String minInstanceCount;
+public class Component extends AbstractComponent {
+
+  String category = CATEGORY_MASTER;
+  String publishConfig = Boolean.FALSE.toString();
+  String minInstanceCount = "0";
   String maxInstanceCount;
-  String autoStartOnFailure;
+  String autoStartOnFailure = Boolean.FALSE.toString();
   String appExports;
   String compExports;
-  CommandScript commandScript;
-  List<ComponentExport> componentExports;
-
+  String type = TYPE_STANDARD;
+  List<ComponentExport> componentExports = new ArrayList<>();
+  List<DockerContainer> dockerContainers = new ArrayList<>();
+  
   public Component() {
-    publishConfig = Boolean.FALSE.toString();
-    componentExports = new ArrayList<ComponentExport>();
   }
 
-  public String getName() {
-    return name;
+  public String getType() {
+    return type;
   }
 
-  public void setName(String name) {
-    this.name = name;
+  public void setType(String type) {
+    this.type = type;
   }
 
   public String getCategory() {
@@ -94,6 +93,19 @@ public class Component {
   public String getMinInstanceCount() {
     return minInstanceCount;
   }
+  
+  @JsonProperty("dockerContainers")
+  public List<DockerContainer> getDockerContainers() {
+     return this.dockerContainers;
+  }
+  
+  public Boolean getAutoStartOnFailureBoolean() {
+    if (SliderUtils.isUnset(getAutoStartOnFailure())) {
+      return Boolean.FALSE;
+    }
+
+    return Boolean.parseBoolean(getAutoStartOnFailure());
+  }
 
   public int getMinInstanceCountInt() throws BadConfigException {
     if (SliderUtils.isUnset(minInstanceCount)) {
@@ -131,14 +143,6 @@ public class Component {
     this.maxInstanceCount = maxInstanceCount;
   }
 
-  public CommandScript getCommandScript() {
-    return commandScript;
-  }
-
-  public void addCommandScript(CommandScript commandScript) {
-    this.commandScript = commandScript;
-  }
-
   public void addComponentExport(ComponentExport export) {
     componentExports.add(export);
   }
@@ -155,16 +159,46 @@ public class Component {
   public String toString() {
     final StringBuilder sb =
         new StringBuilder("{");
-    sb.append(",\n\"name\": ").append(name);
+    sb.append("\n\"name\": ").append(name);
     sb.append(",\n\"category\": ").append(category);
     sb.append(",\n\"commandScript\" :").append(commandScript);
     sb.append('}');
     return sb.toString();
   }
 
-  class AutoRestartSettings {
-    private boolean requiresAutoRestart;
-    private int maxFailures;
-    private int inThisManyMinutes;
+  public void validate(String version) throws SliderException {
+    Metainfo.checkNonNull(getName(), "name", "component");
+    Metainfo.checkNonNull(getCategory(), "category", "component");
+    if (!getCategory().equals(CATEGORY_MASTER)
+        && !getCategory().equals(CATEGORY_SLAVE)
+        && !getCategory().equals(CATEGORY_CLIENT)) {
+      throw new SliderException("Invalid category for the component " + getCategory());
+    }
+
+    Metainfo.checkNonNull(getType(), "type", "component");
+    if (!getType().equals(TYPE_DOCKER)
+        && !getType().equals(TYPE_STANDARD)) {
+      throw new SliderException("Invalid type for the component " + getType());
+    }
+
+    if (version.equals(Metainfo.VERSION_TWO_ZERO)) {
+      if (getType().equals(TYPE_DOCKER)) {
+        throw new SliderException(TYPE_DOCKER + " is not supported in version " + Metainfo.VERSION_TWO_ZERO);
+      }
+
+      if (getCommands().size() > 0) {
+        throw new SliderException("commands are not supported in version " + Metainfo.VERSION_TWO_ZERO);
+      }
+    }
+
+    if (commandScript != null) {
+      commandScript.validate(version);
+    }
+
+    if (version.equals(Metainfo.VERSION_TWO_ONE)) {
+      for (ComponentCommand cc : getCommands()) {
+        cc.validate(version);
+      }
+    }
   }
 }

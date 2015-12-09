@@ -32,15 +32,14 @@ public class MostRecentContainerReleaseSelector implements ContainerReleaseSelec
 
   @Override
   public List<RoleInstance> sortCandidates(int roleId,
-      List<RoleInstance> candidates,
-      int minimumToSelect) {
+      List<RoleInstance> candidates) {
     Collections.sort(candidates, new newerThan());
     return candidates;
   }
 
   private static class newerThan implements Comparator<RoleInstance>, Serializable {
     private final Comparator<Long> innerComparator =
-        new Comparators.ComparatorReverser<Long>(new Comparators.LongComparator());
+        new Comparators.ComparatorReverser<>(new Comparators.LongComparator());
     public int compare(RoleInstance o1, RoleInstance o2) {
       return innerComparator.compare(o1.createTime, o2.createTime);
 

@@ -22,6 +22,12 @@ import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
 import org.apache.slider.api.ClusterDescription;
+import org.apache.slider.api.ClusterNode;
+import org.apache.slider.api.StatusKeys;
+import org.apache.slider.api.types.ApplicationLivenessInformation;
+import org.apache.slider.api.types.ComponentInformation;
+import org.apache.slider.api.types.NodeInformation;
+import org.apache.slider.api.types.RoleStatistics;
 import org.apache.slider.core.conf.AggregateConf;
 import org.apache.slider.core.conf.ConfTreeOperations;
 import org.apache.slider.core.exceptions.NoSuchNodeException;
@@ -33,10 +39,15 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The methods to offer state access to the providers
+ * The methods to offer state access to the providers and other parts of
+ * the system which want read-only access to the state.
  */
 public interface StateAccessForProviders {
 
+  /**
+   * Get a map of role status entries by role Id
+   * @return the map of currently defined roles.
+   */
   Map<Integer, RoleStatus> getRoleStatusMap();
 
   /**
@@ -77,9 +88,18 @@ public interface StateAccessForProviders {
    */
   List<String> listConfigSets();
 
-  Map<ContainerId, RoleInstance> getFailedNodes();
+  /**
+   * Get a map of all the failed containers
+   * @return map of recorded failed containers
+   */
+  Map<ContainerId, RoleInstance> getFailedContainers();
 
-  Map<ContainerId, RoleInstance> getLiveNodes();
+  /**
+   * Get the live containers.
+   * 
+   * @return the live nodes
+   */
+  Map<ContainerId, RoleInstance> getLiveContainers();
 
   /**
    * Get the current cluster description 
@@ -117,7 +137,17 @@ public interface StateAccessForProviders {
 
   long getSnapshotTime();
 
+  /**
+   * Get a snapshot of the entire aggregate configuration
+   * @return the aggregate configuration
+   */
   AggregateConf getInstanceDefinitionSnapshot();
+
+  /**
+   * Get the desired/unresolved value
+   * @return unresolved
+   */
+  AggregateConf getUnresolvedInstanceDefinition();
 
   /**
    * Look up a role from its key -or fail 
@@ -202,7 +232,82 @@ public interface StateAccessForProviders {
   /**
    * Update the cluster description with anything interesting
    */
-  void refreshClusterStatus();
+  ClusterDescription refreshClusterStatus();
 
+  /**
+   * Get a deep clone of the role status list. Concurrent events may mean this
+   * list (or indeed, some of the role status entries) may be inconsistent
+   * @return a snapshot of the role status entries
+   */
   List<RoleStatus> cloneRoleStatusList();
+
+  /**
+   * get application liveness information
+   * @return a snapshot of the current liveness information
+   */
+  ApplicationLivenessInformation getApplicationLivenessInformation();
+
+  /**
+   * Get the live statistics map
+   * @return a map of statistics values, defined in the {@link StatusKeys}
+   * keylist.
+   */
+  Map<String, Integer> getLiveStatistics();
+
+  /**
+   * Get a snapshot of component information.
+   * <p>
+   *   This does <i>not</i> include any container list, which 
+   *   is more expensive to create.
+   * @return a map of current role status values.
+   */
+  Map<String, ComponentInformation> getComponentInfoSnapshot();
+
+  /**
+   * Find out about the nodes for specific roles
+   * @return 
+   */
+  Map<String, Map<String, ClusterNode>> getRoleClusterNodeMapping();
+
+  /**
+   * Enum all role instances by role.
+   * @param role role, or "" for all roles
+   * @return a list of instances, may be empty
+   */
+  List<RoleInstance> enumLiveInstancesInRole(String role);
+
+  /**
+   * Look up all containers of a specific component name 
+   * @param component component/role name
+   * @return list of instances. This is a snapshot
+   */
+  List<RoleInstance> lookupRoleContainers(String component);
+
+  /**
+   * Get the JSON serializable information about a component
+   * @param component component to look up
+   * @return a structure describing the component.
+   */
+  ComponentInformation getComponentInformation(String component);
+
+
+  /**
+   * Get a clone of the nodemap.
+   * The instances inside are not cloned
+   * @return a possibly empty map of hostname top info
+   */
+  Map<String, NodeInformation> getNodeInformationSnapshot();
+
+  /**
+   * get information on a node
+   * @param hostname hostname to look up
+   * @return the information, or null if there is no information held.
+   */
+  NodeInformation getNodeInformation(String hostname);
+
+  /**
+   * Get the aggregate statistics across all roles
+   * @return role statistics
+   */
+  RoleStatistics getRoleStatistics();
 }

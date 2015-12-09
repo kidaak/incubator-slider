@@ -30,6 +30,7 @@ from AgentConfig import AgentConfig
 from AgentToggleLogger import AgentToggleLogger
 from CommandStatusDict import CommandStatusDict
 from CustomServiceOrchestrator import CustomServiceOrchestrator
+from DockerManager import DockerManager
 import Constants
 
 
@@ -51,6 +52,8 @@ class ActionQueue(threading.Thread):
 
   STORE_APPLIED_CONFIG = 'record_config'
   AUTO_RESTART = 'auto_restart'
+  
+  docker_mode = False
 
   def __init__(self, config, controller, agentToggleLogger):
     super(ActionQueue, self).__init__()
@@ -63,10 +66,12 @@ class ActionQueue(threading.Thread):
     self.controller = controller
     self._stop = threading.Event()
     self.tmpdir = config.getResolvedPath(AgentConfig.APP_TASK_DIR)
+    self.componentPackage = ''
     self.customServiceOrchestrator = CustomServiceOrchestrator(config,
                                                                controller,
                                                                self.queueOutAgentToggleLogger)
-
+    self.dockerManager = DockerManager(self.tmpdir, config.getWorkRootPath(), self.customServiceOrchestrator)
+    
 
   def stop(self):
     self._stop.set()
@@ -121,6 +126,12 @@ class ActionQueue(threading.Thread):
     '''
     clusterName = command['clusterName']
     commandId = command['commandId']
+    if 'package' in command:
+      self.componentPackage = command['package']
+    else:
+      self.componentPackage = ''
+    
+    logger.info("Package received: " + self.componentPackage)
 
     message = "Executing command with id = {commandId} for role = {role} of " \
               "cluster {cluster}".format(
@@ -155,9 +166,15 @@ class ActionQueue(threading.Thread):
 
     if store_command:
       logger.info("Component has indicated auto-restart. Saving details from START command.")
-
-    # running command
-    commandresult = self.customServiceOrchestrator.runCommand(command,
+    
+    logger.info("Running command: " + str(command))
+    
+    if 'configurations' in command and 'docker' in command['configurations']:
+      self.docker_mode = True
+      commandresult = self.dockerManager.execute_command(command, store_config or store_command)
+    else:
+      # running command
+      commandresult = self.customServiceOrchestrator.runCommand(command,
                                                               in_progress_status[
                                                                 'tmpout'],
                                                               in_progress_status[
@@ -168,6 +185,7 @@ class ActionQueue(threading.Thread):
     # In future we might check status of STOP command and take other measures
     # if graceful STOP fails (like force kill the processes)
     if command['roleCommand'] == 'STOP':
+      logger.info("Stop command received")
       self.controller.appGracefulStopTriggered = True
 
     # dumping results
@@ -214,7 +232,11 @@ class ActionQueue(threading.Thread):
       service = command['serviceName']
       component = command['componentName']
       reportResult = CommandStatusDict.shouldReportResult(command)
-      component_status = self.customServiceOrchestrator.requestComponentStatus(command)
+      component_status = None
+      if self.docker_mode:
+        component_status = self.dockerManager.query_status(command)
+      else:
+        component_status = self.customServiceOrchestrator.requestComponentStatus(command)
 
       result = {"componentName": component,
                 "msg": "",

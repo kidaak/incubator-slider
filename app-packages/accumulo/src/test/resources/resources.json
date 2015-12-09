@@ -13,6 +13,7 @@
       "yarn.memory": "64"
     },
     "slider-appmaster": {
+      "yarn.memory": "128"
     },
     "ACCUMULO_TSERVER": {
       "yarn.role.priority": "2",
@@ -32,7 +33,12 @@
     "ACCUMULO_TRACER": {
       "yarn.role.priority": "5",
       "yarn.component.instances": "0",
-      "yarn.memory": "256"
+      "yarn.memory": "128"
+    },
+    "ACCUMULO_PROXY": {
+      "yarn.role.priority": "6",
+      "yarn.component.instances": "0",
+      "yarn.memory": "128"
     }
   }
 }

@@ -46,17 +46,20 @@ public abstract class YarnZKMiniClusterTestBase extends YarnMiniClusterTestBase 
   }
 
   public ZKIntegration createZKIntegrationInstance(String zkQuorum,
-                                                   String clusterName,
-                                                   boolean createClusterPath,
-                                                   boolean canBeReadOnly,
-                                                   int timeout) {
+      String clusterName,
+      boolean createClusterPath,
+      boolean canBeReadOnly,
+      int timeout,
+      int sessionTimeout = ZKIntegration.SESSION_TIMEOUT) {
     
     BlockingZKWatcher watcher = new BlockingZKWatcher();
     ZKIntegration zki = ZKIntegration.newInstance(zkQuorum,
-                                                  USERNAME,
-                                                  clusterName,
-                                                  createClusterPath,
-                                                  canBeReadOnly, watcher) 
+        USERNAME,
+        clusterName,
+        createClusterPath,
+        canBeReadOnly,
+        watcher,
+        sessionTimeout)
     zki.init()
     //here the callback may or may not have occurred.
     //optionally wait for it
@@ -103,6 +106,7 @@ public abstract class YarnZKMiniClusterTestBase extends YarnMiniClusterTestBase 
     createMicroZKCluster("-${name?:methodName.methodName}", conf)
     conf.setBoolean(RegistryConstants.KEY_REGISTRY_ENABLED, true)
     conf.set(RegistryConstants.KEY_REGISTRY_ZK_QUORUM, ZKBinding)
+    //now create the cluster
     name = super.createMiniCluster(name, conf, noOfNodeManagers, numLocalDirs, numLogDirs,
         startHDFS)
 

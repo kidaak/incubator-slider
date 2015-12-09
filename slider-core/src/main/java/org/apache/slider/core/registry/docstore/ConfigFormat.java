@@ -23,6 +23,7 @@ public enum ConfigFormat {
   JSON("json"),
   PROPERTIES("properties"),
   XML("xml"),
+  ENV("env"),
 //  YAML("yaml");
   ;
   ConfigFormat(String suffix) {
@@ -44,7 +45,7 @@ public enum ConfigFormat {
   /**
    * Get a matching format or null
    * @param type
-   * @return
+   * @return the format
    */
   public static ConfigFormat resolve(String type) {
     for (ConfigFormat format: values()) {

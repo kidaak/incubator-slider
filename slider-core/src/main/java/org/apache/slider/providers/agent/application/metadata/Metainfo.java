@@ -16,6 +16,8 @@
  */
 package org.apache.slider.providers.agent.application.metadata;
 
+import org.apache.slider.common.tools.SliderUtils;
+import org.apache.slider.core.exceptions.SliderException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,12 +27,12 @@ import org.slf4j.LoggerFactory;
 public class Metainfo {
   protected static final Logger log =
       LoggerFactory.getLogger(Metainfo.class);
+  public static String VERSION_TWO_ZERO = "2.0";
+  public static String VERSION_TWO_ONE = "2.1";
 
   String schemaVersion;
+  ApplicationPackage applicationPackage;
   Application application;
-
-  public Metainfo() {
-  }
 
   public String getSchemaVersion() {
     return schemaVersion;
@@ -38,6 +40,14 @@ public class Metainfo {
 
   public void setSchemaVersion(String schemaVersion) {
     this.schemaVersion = schemaVersion;
+  }
+
+  public ApplicationPackage getApplicationPackage() {
+    return applicationPackage;
+  }
+
+  public void setApplicationPackage(ApplicationPackage pkg) {
+    this.applicationPackage = pkg;
   }
 
   public Application getApplication() {
@@ -50,7 +60,7 @@ public class Metainfo {
 
   public Component getApplicationComponent(String roleName) {
     if (application == null) {
-      log.error("Malformed app definition: Expect application as the top level element for metainfo.xml");
+      log.error("Malformed app definition: Expect application as the top level element for metainfo");
     } else {
       for (Component component : application.getComponents()) {
         if (component.getName().equals(roleName)) {
@@ -59,5 +69,37 @@ public class Metainfo {
       }
     }
     return null;
+  }
+
+  public void validate() throws SliderException {
+    if (!VERSION_TWO_ONE.equals(schemaVersion) &&
+        !VERSION_TWO_ZERO.equals(schemaVersion)) {
+      throw new SliderException("Unsupported version " + getSchemaVersion());
+    }
+    if (application != null) {
+      application.validate(schemaVersion);
+    }
+    if (applicationPackage != null) {
+      applicationPackage.validate(schemaVersion);
+    }
+  }
+
+  public static void checkNonNull(String value, String field, String type) throws SliderException {
+    if (SliderUtils.isUnset(value)) {
+      throw new SliderException(type + "." + field + " cannot be null");
+    }
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder builder = new StringBuilder();
+    builder.append("Metainfo [schemaVersion=");
+    builder.append(schemaVersion);
+    builder.append(", applicationPackage=");
+    builder.append(applicationPackage);
+    builder.append(", application=");
+    builder.append(application);
+    builder.append("]");
+    return builder.toString();
   }
 }

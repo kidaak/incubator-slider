@@ -48,7 +48,7 @@ public interface FuntestProperties extends SliderXMLConfKeysForTesting {
   String KEY_AM_RESTART_SLEEP_TIME = "slider.test.am.restart.time"
   int DEFAULT_AM_RESTART_SLEEP_TIME = 30000
 
-  String CLIENT_CONFIG_FILENAME = SliderKeys.CLIENT_RESOURCE
+  String CLIENT_CONFIG_FILENAME = SliderKeys.SLIDER_CLIENT_XML
   
   String ENV_SLIDER_CONF_DIR = "SLIDER_CONF_DIR"
   String ENV_HADOOP_CONF_DIR = "HADOOP_CONF_DIR"
@@ -75,8 +75,4 @@ public interface FuntestProperties extends SliderXMLConfKeysForTesting {
   String HDFS_SITE_XML = "hdfs-site.xml"
   String YARN_SITE_XML = "yarn-site.xml"
 
-  /**
-   * Flag to indicate that the .py script should be launched: {@value}
-   */
-  String KEY_LAUNCH_PYTHON = "slider.test.launch.python"
 }

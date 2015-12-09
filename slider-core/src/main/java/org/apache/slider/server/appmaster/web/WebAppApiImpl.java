@@ -17,11 +17,18 @@
 package org.apache.slider.server.appmaster.web;
 
 import org.apache.hadoop.registry.client.api.RegistryOperations;
+<<<<<<< HEAD
 import org.apache.slider.api.SliderClusterProtocol;
+=======
+>>>>>>> refs/remotes/apache/develop
 import org.apache.slider.providers.ProviderService;
+import org.apache.slider.server.appmaster.AppMasterActionOperations;
+import org.apache.slider.server.appmaster.actions.QueueAccess;
+import org.apache.slider.server.appmaster.management.MetricsAndMonitoring;
 import org.apache.slider.server.appmaster.state.RoleStatus;
 import org.apache.slider.server.appmaster.state.StateAccessForProviders;
 import org.apache.slider.server.appmaster.web.rest.agent.AgentRestOperations;
+import org.apache.slider.server.appmaster.web.rest.application.resources.ContentCache;
 import org.apache.slider.server.services.security.CertificateManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,39 +45,45 @@ import static com.google.common.base.Preconditions.checkNotNull;
 public class WebAppApiImpl implements WebAppApi {
   private static final Logger log = LoggerFactory.getLogger(WebAppApiImpl.class);
 
+<<<<<<< HEAD
   protected final SliderClusterProtocol clusterProto;
+=======
+>>>>>>> refs/remotes/apache/develop
   protected final StateAccessForProviders appState;
   protected final ProviderService provider;
   protected final CertificateManager certificateManager;
   private final RegistryOperations registryOperations;
+  private final MetricsAndMonitoring metricsAndMonitoring;
+  private final QueueAccess queues;
+  private final AppMasterActionOperations appMasterOperations;
+  private final ContentCache contentCache;
 
-  public WebAppApiImpl(SliderClusterProtocol clusterProto,
-      StateAccessForProviders appState,
+  public WebAppApiImpl(StateAccessForProviders appState,
       ProviderService provider,
       CertificateManager certificateManager,
-      RegistryOperations registryOperations) {
-    this.registryOperations = registryOperations;
-    checkNotNull(clusterProto);
+      RegistryOperations registryOperations,
+      MetricsAndMonitoring metricsAndMonitoring,
+      QueueAccess queues,
+      AppMasterActionOperations appMasterOperations,
+      ContentCache contentCache) {
+    this.appMasterOperations = appMasterOperations;
+    this.contentCache = contentCache;
     checkNotNull(appState);
     checkNotNull(provider);
-    
-    this.clusterProto = clusterProto;
+    this.queues = queues;
+
+    this.registryOperations = registryOperations;
     this.appState = appState;
     this.provider = provider;
     this.certificateManager = certificateManager;
+    this.metricsAndMonitoring = metricsAndMonitoring;
   }
 
-  /* (non-Javadoc)
-   * @see org.apache.slider.server.appmaster.web.WebAppApi#getAppState()
-   */
   @Override
   public StateAccessForProviders getAppState() {
     return appState;
   }
 
-  /* (non-Javadoc)
-   * @see org.apache.slider.server.appmaster.web.WebAppApi#getProviderService()
-   */
   @Override
   public ProviderService getProviderService() {
     return provider;
@@ -81,22 +94,10 @@ public class WebAppApiImpl implements WebAppApi {
     return certificateManager;
   }
 
-  /* (non-Javadoc)
-     * @see org.apache.slider.server.appmaster.web.WebAppApi#getClusterProtocol()
-     */
-  @Override
-  public SliderClusterProtocol getClusterProtocol() {
-    return clusterProto;
-  }
-  
-  /* (non-Javadoc)
-   * @see org.apache.slider.server.appmaster.web.WebAppApi#getRoleStatusByName()
-   */
   @Override
   public Map<String,RoleStatus> getRoleStatusByName() {
     List<RoleStatus> roleStatuses = appState.cloneRoleStatusList();
-    TreeMap<String, RoleStatus> map =
-        new TreeMap<String, RoleStatus>();
+    Map<String, RoleStatus> map = new TreeMap<>();
     for (RoleStatus status : roleStatuses) {
       map.put(status.getName(), status);
     }
@@ -111,5 +112,25 @@ public class WebAppApiImpl implements WebAppApi {
   @Override
   public RegistryOperations getRegistryOperations() {
     return registryOperations;
+  }
+
+  @Override
+  public MetricsAndMonitoring getMetricsAndMonitoring() {
+    return metricsAndMonitoring;
+  }
+
+  @Override
+  public QueueAccess getQueues() {
+    return queues;
+  }
+
+  @Override
+  public AppMasterActionOperations getAMOperations() {
+    return appMasterOperations;
+  }
+
+  @Override
+  public ContentCache getContentCache() {
+    return contentCache;
   }
 }

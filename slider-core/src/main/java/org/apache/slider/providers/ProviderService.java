@@ -106,7 +106,6 @@ public interface ProviderService extends ProviderCore,
   /**
    * Load a specific XML configuration file for the provider config
    * @param confDir configuration directory
-   * @param siteXMLFilename provider-specific filename
    * @return a configuration to be included in status
    * @throws BadCommandArgumentsException
    * @throws IOException
@@ -153,9 +152,15 @@ public interface ProviderService extends ProviderCore,
    * value can be a URL that will create an anchor over the key text.
    * 
    * If no anchor is needed/desired, insert the key with a null value.
-   * @return
+   * @return the details
    */
   Map<String, String> buildMonitorDetails(ClusterDescription clusterSpec);
+
+  /**
+   * Get a human friendly name for web UIs and messages
+   * @return a name string. Default is simply the service instance name.
+   */
+  String getHumanName();
 
   public void bind(StateAccessForProviders stateAccessor,
       QueueAccess queueAccess,

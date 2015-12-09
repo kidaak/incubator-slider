@@ -26,7 +26,6 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.security.alias.CredentialProvider
 import org.apache.hadoop.security.alias.CredentialProviderFactory
 import org.apache.hadoop.registry.client.types.ServiceRecord
-import org.apache.slider.accumulo.CustomAuthenticator
 import org.apache.slider.api.ClusterDescription
 import org.apache.slider.client.SliderClient
 import org.apache.slider.common.SliderKeys
@@ -54,11 +53,15 @@ class AccumuloBasicIT extends AccumuloAgentCommandTestBase {
     return sysprop("test.app.resources.dir") + "/resources.json"
   }
 
+  protected String getDefaultTemplate() {
+    return sysprop("test.app.resources.dir") + "/appConfig-default.json"
+  }
+
   protected String getAppTemplate() {
     String appTemplateFile = templateName()
     Configuration conf = new Configuration()
     FileSystem fs = FileSystem.getLocal(conf)
-    InputStream stream = new FileInputStream(sysprop("test.app.resources.dir") + "/appConfig-default.json")
+    InputStream stream = new FileInputStream(getDefaultTemplate())
     assert stream!=null, "Couldn't pull appConfig.json from app pkg"
     ConfTreeSerDeser c = new ConfTreeSerDeser()
     ConfTree t = c.fromStream(stream)
@@ -95,12 +98,9 @@ class AccumuloBasicIT extends AccumuloAgentCommandTestBase {
     conf.set(CredentialProviderFactory.CREDENTIAL_PROVIDER_PATH, jks)
     CredentialProvider provider =
       CredentialProviderFactory.getProviders(conf).get(0)
-    provider.createCredentialEntry(
-      CustomAuthenticator.ROOT_INITIAL_PASSWORD_PROPERTY, PASSWORD.toCharArray())
+    // root initial password and trace password will be initialized at runtime
     provider.createCredentialEntry(Property.INSTANCE_SECRET.toString(),
       INSTANCE_SECRET.toCharArray())
-    provider.createCredentialEntry(Property.TRACE_TOKEN_PROPERTY_PREFIX
-      .toString() + "password", PASSWORD.toCharArray())
     provider.createCredentialEntry(Property.RPC_SSL_KEYSTORE_PASSWORD
       .toString(), KEY_PASS.toCharArray())
     provider.createCredentialEntry(Property.RPC_SSL_TRUSTSTORE_PASSWORD
@@ -119,6 +119,18 @@ class AccumuloBasicIT extends AccumuloAgentCommandTestBase {
     return "test_accumulo_basic"
   }
 
+  protected Map<String, Integer> getRoleMap() {
+    // must match the values in src/test/resources/resources.json
+    return [
+      "ACCUMULO_MASTER" : 1,
+      "ACCUMULO_TSERVER" : 2,
+      "ACCUMULO_MONITOR": 1,
+      "ACCUMULO_GC": 0,
+      "ACCUMULO_TRACER" : 0,
+      "ACCUMULO_PROXY" : 0
+    ];
+  }
+
   @Test
   public void testAccumuloClusterCreate() throws Throwable {
 
@@ -127,25 +139,13 @@ class AccumuloBasicIT extends AccumuloAgentCommandTestBase {
     def path = buildClusterPath(getClusterName())
     assert !clusterFS.exists(path)
 
-    SliderShell shell = slider(EXIT_SUCCESS,
-      [
-        ACTION_CREATE, getClusterName(),
-        ARG_TEMPLATE, APP_TEMPLATE,
-        ARG_RESOURCES, APP_RESOURCE
-      ])
+    SliderShell shell = createTemplatedSliderApplication(getClusterName(),
+      APP_TEMPLATE, APP_RESOURCE,
+      ["<", sysprop("test.app.resources.dir") + "/test_password_file"])
 
     logShell(shell)
 
     ensureApplicationIsUp(getClusterName())
-
-    // must match the values in src/test/resources/resources.json
-    Map<String, Integer> roleMap = [
-      "ACCUMULO_MASTER" : 1,
-      "ACCUMULO_TSERVER" : 2,
-      "ACCUMULO_MONITOR": 1,
-      "ACCUMULO_GC": 0,
-      "ACCUMULO_TRACER" : 0
-    ];
 
     //get a slider client against the cluster
     SliderClient sliderClient = bondToCluster(SLIDER_CONFIG, getClusterName())
@@ -155,7 +155,7 @@ class AccumuloBasicIT extends AccumuloAgentCommandTestBase {
     log.info("Connected via Client {}", sliderClient.toString())
 
     //wait for the role counts to be reached
-    waitForRoleCount(sliderClient, roleMap, ACCUMULO_LAUNCH_WAIT_TIME)
+    waitForRoleCount(sliderClient, getRoleMap(), ACCUMULO_LAUNCH_WAIT_TIME)
 
     sleep(ACCUMULO_GO_LIVE_TIME)
 
@@ -167,18 +167,28 @@ class AccumuloBasicIT extends AccumuloAgentCommandTestBase {
     return "Create a working Accumulo cluster $clusterName"
   }
 
+  public static PublishedConfiguration getExport(SliderClient sliderClient,
+                                                 String clusterName,
+                                                 String exportName) {
+    String path = servicePath(currentUser(),
+      SliderKeys.APP_TYPE,
+      clusterName);
+    ServiceRecord instance = sliderClient.resolve(path)
+    RegistryRetriever retriever = new RegistryRetriever(
+        sliderClient.config,
+        instance)
+    PublishedConfiguration configuration = retriever.retrieveConfiguration(
+      retriever.getConfigurations(true), exportName, true)
+    return configuration
+  }
+
   public static String getMonitorUrl(SliderClient sliderClient, String clusterName) {
     int tries = 5
     Exception caught;
     while (true) {
       try {
-        String path = servicePath(currentUser(),
-            SliderKeys.APP_TYPE,
-            clusterName);
-        ServiceRecord instance = sliderClient.resolve(path)
-        RegistryRetriever retriever = new RegistryRetriever(instance)
-        PublishedConfiguration configuration = retriever.retrieveConfiguration(
-          retriever.getConfigurations(true), "quicklinks", true)
+        PublishedConfiguration configuration = getExport(sliderClient,
+          clusterName, "quicklinks")
 
         // must match name set in metainfo.xml
         String monitorUrl = configuration.entries.get("org.apache.slider.monitor")
@@ -197,7 +207,7 @@ class AccumuloBasicIT extends AccumuloAgentCommandTestBase {
   }
 
   public static void checkMonitorPage(String monitorUrl) {
-    String monitor = fetchWebPageWithoutError(monitorUrl);
+    String monitor = fetchWebPageRaisedErrorCodes(monitorUrl);
     assert monitor != null, "Monitor page null"
     assert monitor.length() > 100, "Monitor page too short"
     assert monitor.contains("Accumulo Overview"), "Monitor page didn't contain expected text"

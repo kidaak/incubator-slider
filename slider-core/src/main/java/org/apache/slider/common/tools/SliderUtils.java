@@ -20,9 +20,12 @@ package org.apache.slider.common.tools;
 
 import com.google.common.base.Preconditions;
 
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
 import org.apache.commons.io.output.ByteArrayOutputStream;
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -32,7 +35,6 @@ import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.GlobFilter;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.nativeio.NativeIO;
 import org.apache.hadoop.net.NetUtils;
@@ -45,13 +47,19 @@ import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.records.ApplicationReport;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.LocalResource;
+import org.apache.hadoop.yarn.api.records.NodeReport;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
+import org.apache.hadoop.yarn.client.api.AMRMClient;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.slider.Slider;
 import org.apache.slider.api.InternalKeys;
 import org.apache.slider.api.RoleKeys;
+import org.apache.slider.api.types.ContainerInformation;
 import org.apache.slider.common.SliderKeys;
 import org.apache.slider.common.SliderXmlConfKeys;
+import org.apache.slider.common.params.Arguments;
+import org.apache.slider.common.params.SliderActions;
+import org.apache.slider.core.conf.ConfTreeOperations;
 import org.apache.slider.core.conf.MapOperations;
 import org.apache.slider.core.exceptions.BadClusterStateException;
 import org.apache.slider.core.exceptions.BadCommandArgumentsException;
@@ -60,14 +68,20 @@ import org.apache.slider.core.exceptions.ErrorStrings;
 import org.apache.slider.core.exceptions.SliderException;
 import org.apache.slider.core.launch.ClasspathConstructor;
 import org.apache.slider.core.main.LauncherExitCodes;
+<<<<<<< HEAD
+=======
+import org.apache.slider.providers.agent.AgentKeys;
+>>>>>>> refs/remotes/apache/develop
 import org.apache.slider.server.services.utility.PatternValidator;
 import org.apache.slider.server.services.workflow.ForkedProcessService;
 import org.apache.zookeeper.server.util.KerberosUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileReader;
@@ -106,6 +120,9 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.zip.GZIPOutputStream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
  * These are slider-specific Util methods
@@ -138,6 +155,12 @@ public final class SliderUtils {
    */
   public static final String PYTHON = "python";
 
+  /**
+   * name of docker program
+   */
+  public static final String DOCKER = "docker";
+  public static final int NODE_LIST_LIMIT = 10;
+
   private SliderUtils() {
   }
 
@@ -154,6 +177,25 @@ public final class SliderUtils {
     return !isUnset(s);
   }
 
+  /**
+   * Probe for a list existing and not being empty
+   * @param l list
+   * @return true if the reference is valid and it contains entries
+   */
+
+  public static boolean isNotEmpty(List l) {
+    return l != null && !l.isEmpty();
+  }
+
+  /**
+   * Probe for a map existing and not being empty
+   * @param m map
+   * @return true if the reference is valid and it contains map entries
+   */
+  public static boolean isNotEmpty(Map m) {
+    return m != null && !m.isEmpty();
+  }
+  
   /*
    * Validates whether num is an integer
    * @param num
@@ -464,8 +506,7 @@ public final class SliderUtils {
 
     //if the fallback option is NOT set, enable it.
     //if it is explicitly set to anything -leave alone
-    if (conf.get(SliderXmlConfKeys.IPC_CLIENT_FALLBACK_TO_SIMPLE_AUTH) ==
-        null) {
+    if (conf.get(SliderXmlConfKeys.IPC_CLIENT_FALLBACK_TO_SIMPLE_AUTH) == null) {
       conf.set(SliderXmlConfKeys.IPC_CLIENT_FALLBACK_TO_SIMPLE_AUTH, "true");
     }
     return conf;
@@ -633,6 +674,102 @@ public final class SliderUtils {
     return builder.toString();
   }
 
+  /**
+   * Convert the instance details of an application to a string
+   * @param name instance name
+   * @param report the application report
+   * @param verbose verbose output
+   * @return a string
+   */
+  public static String instanceDetailsToString(String name,
+      ApplicationReport report,
+      List<ContainerInformation> containers,
+      String version,
+      Set<String> components,
+      boolean verbose) {
+    // format strings
+    String staticf = "%-30s";
+    String reportedf = staticf + "  %10s  %-42s";
+    String livef = reportedf + "  %s";
+    StringBuilder builder = new StringBuilder(200);
+    if (report == null) {
+      builder.append(String.format(staticf, name));
+    } else {
+      // there's a report to look at
+      String appId = report.getApplicationId().toString();
+      String state = report.getYarnApplicationState().toString();
+      if (report.getYarnApplicationState() == YarnApplicationState.RUNNING) {
+        // running: there's a URL
+        builder.append(
+            String.format(livef, name, state, appId, report.getTrackingUrl()));
+      } else {
+        builder.append(String.format(reportedf, name, state, appId));
+      }
+      if (verbose) {
+        builder.append('\n');
+        builder.append(SliderUtils.appReportToString(report, "\n  "));
+      }
+      if (containers != null) {
+        builder.append('\n');
+        builder.append(SliderUtils.containersToString(containers, version,
+            components));
+      }
+    }
+
+    builder.append('\n');
+    return builder.toString();
+  }
+
+  public static String containersToString(
+      List<ContainerInformation> containers, String version,
+      Set<String> components) {
+    String containerf = "  %-28s  %30s  %45s  %s\n";
+    StringBuilder builder = new StringBuilder(512);
+    builder.append("Containers:\n");
+    builder.append(String.format("  %-28s  %30s  %45s  %s\n", "Component Name",
+        "App Version", "Container Id", "Container Info/Logs"));
+    for (ContainerInformation container : containers) {
+      if (filter(container.appVersion, version)
+          || filter(container.component, components)) {
+        continue;
+      }
+      builder.append(String.format(containerf, container.component,
+          container.appVersion, container.containerId, container.host
+              + SliderKeys.YARN_CONTAINER_PATH + container.containerId));
+    }
+    return builder.toString();
+  }
+
+  /**
+   * Filter a string value given a single filter
+   * 
+   * @param value
+   *          the string value to check
+   * @param filter
+   *          a single string filter
+   * @return return true if value should be trapped, false if it should be let
+   *         through
+   */
+  public static boolean filter(String value, String filter) {
+    return !(StringUtils.isEmpty(filter) || filter.equals(value));
+  }
+
+  /**
+   * Filter a string value given a set of filters
+   * 
+   * @param value
+   *          the string value to check
+   * @param filters
+   *          a set of string filters
+   * @return return true if value should be trapped, false if it should be let
+   *         through
+   */
+  public static boolean filter(String value, Set<String> filters) {
+    if (filters.isEmpty() || filters.contains(value)) {
+      return false;
+    }
+    return true;
+  }
 
   /**
    * Sorts the given list of application reports, most recently started 
@@ -899,7 +1036,7 @@ public final class SliderUtils {
    * something other than 0.0.0.0
    */
   public static boolean isAddressDefined(InetSocketAddress address) {
-    return !(address.getHostName().equals("0.0.0.0"));
+    return !(address.getHostString().equals("0.0.0.0"));
   }
 
   public static void setRmAddress(Configuration conf, String rmAddr) {
@@ -921,11 +1058,12 @@ public final class SliderUtils {
       return "null container";
     }
     return String.format(Locale.ENGLISH,
-        "ContainerID=%s nodeID=%s http=%s priority=%s",
+        "ContainerID=%s nodeID=%s http=%s priority=%s resource=%s",
         container.getId(),
         container.getNodeId(),
         container.getNodeHttpAddress(),
-        container.getPriority());
+        container.getPriority(),
+        container.getResource());
   }
 
   /**
@@ -1024,7 +1162,8 @@ public final class SliderUtils {
    * @param clusterRoleMap cluster role map to merge onto
    * @param commandOptions command opts
    */
-  public static void applyCommandLineRoleOptsToRoleMap(Map<String, Map<String, String>> clusterRoleMap,
+  public static void applyCommandLineRoleOptsToRoleMap(
+      Map<String, Map<String, String>> clusterRoleMap,
       Map<String, Map<String, String>> commandOptions) {
     for (Map.Entry<String, Map<String, String>> entry : commandOptions.entrySet()) {
       String key = entry.getKey();
@@ -1087,11 +1226,11 @@ public final class SliderUtils {
    * @param conf configuration to look at
    * @return true if the cluster is secure
    * @throws IOException cluster is secure
-   * @throws BadConfigException the configuration/process is invalid
+   * @throws SliderException the configuration/process is invalid
    */
   public static boolean maybeInitSecurity(Configuration conf) throws
       IOException,
-      BadConfigException {
+      SliderException {
     boolean clusterSecure = isHadoopClusterSecure(conf);
     if (clusterSecure) {
       log.debug("Enabling security");
@@ -1109,7 +1248,7 @@ public final class SliderUtils {
    */
   public static boolean initProcessSecurity(Configuration conf) throws
       IOException,
-      BadConfigException {
+      SliderException {
 
     if (processSecurityAlreadyInitialized.compareAndSet(true, true)) {
       //security is already inited
@@ -1132,27 +1271,26 @@ public final class SliderUtils {
         UserGroupInformation.AuthenticationMethod.KERBEROS, conf);*/
     UserGroupInformation.setConfiguration(conf);
     UserGroupInformation authUser = UserGroupInformation.getCurrentUser();
-    log.debug("Authenticating as " + authUser.toString());
+    log.debug("Authenticating as {}", authUser);
     log.debug("Login user is {}", UserGroupInformation.getLoginUser());
     if (!UserGroupInformation.isSecurityEnabled()) {
-      throw new BadConfigException("Although secure mode is enabled," +
-                                   "the application has already set up its user as an insecure entity %s",
+      throw new SliderException(LauncherExitCodes.EXIT_UNAUTHORIZE,
+          "Although secure mode is enabled," +
+         "the application has already set up its user as an insecure entity %s",
           authUser);
     }
     if (authUser.getAuthenticationMethod() ==
         UserGroupInformation.AuthenticationMethod.SIMPLE) {
       throw new BadConfigException("Auth User is not Kerberized %s" +
-                                   " -security has already been set up with the wrong authentication method. "
-                                   +
-                                   "This can occur if a file system has already been created prior to the loading of "
-                                   + "the security configuration.",
+         " -security has already been set up with the wrong authentication method. "
+         + "This can occur if a file system has already been created prior to the loading of "
+         + "the security configuration.",
           authUser);
 
     }
 
     SliderUtils.verifyPrincipalSet(conf, YarnConfiguration.RM_PRINCIPAL);
-    SliderUtils.verifyPrincipalSet(conf,
-        DFSConfigKeys.DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY);
+    SliderUtils.verifyPrincipalSet(conf, SliderXmlConfKeys.DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY);
     return true;
   }
 
@@ -1216,22 +1354,41 @@ public final class SliderUtils {
     log.info("Loading all dependencies from {}", srcPath);
     if (SliderUtils.isSet(srcPath)) {
       File srcFolder = new File(srcPath);
-      FilenameFilter jarFilter = new FilenameFilter() {
-        public boolean accept(File dir, String name) {
-          String lowercaseName = name.toLowerCase();
-          if (lowercaseName.endsWith(".jar")) {
-            return true;
-          } else {
-            return false;
-          }
-        }
-      };
+      FilenameFilter jarFilter = createJarFilter();
       File[] listOfJars = srcFolder.listFiles(jarFilter);
       for (File jarFile : listOfJars) {
         LocalResource res = sliderFileSystem.submitFile(jarFile, tempPath, libDir, jarFile.getName());
         providerResources.put(libDir + "/" + jarFile.getName(), res);
       }
     }
+  }
+
+  /**
+   * Accept all filenames ending with {@code .jar}
+   * @return a filename filter
+   */
+  public static FilenameFilter createJarFilter() {
+    return new FilenameFilter() {
+      public boolean accept(File dir, String name) {
+        return name.toLowerCase(Locale.ENGLISH).endsWith(".jar");
+      }
+    };
+  }
+
+  /**
+   * Submit the AM tar.gz containing all dependencies and map it
+   * @param providerResources provider map to build up
+   * @param sliderFileSystem remote fs
+   * @throws IOException, SliderException trouble copying to HDFS
+   */
+  public static void putAmTarGzipAndUpdate(
+      Map<String, LocalResource> providerResources,
+      SliderFileSystem sliderFileSystem
+  ) throws IOException, SliderException {
+    log.info("Loading all dependencies from {}{}",
+        SliderKeys.SLIDER_DEPENDENCY_TAR_GZ_FILE_NAME,
+        SliderKeys.SLIDER_DEPENDENCY_TAR_GZ_FILE_EXT);
+    sliderFileSystem.submitTarGzipAndUpdate(providerResources);
   }
 
   public static Map<String, Map<String, String>> deepClone(Map<String, Map<String, String>> src) {
@@ -1304,23 +1461,22 @@ public final class SliderUtils {
 
   /**
    * Register the client resource in
-   * {@link SliderKeys#CLIENT_RESOURCE}
+   * {@link SliderKeys#SLIDER_CLIENT_XML}
    * for Configuration instances.
    *
    * @return true if the resource could be loaded
    */
   public static URL registerClientResource() {
-    return ConfigHelper.registerDefaultResource(SliderKeys.CLIENT_RESOURCE);
+    return ConfigHelper.registerDefaultResource(SliderKeys.SLIDER_CLIENT_XML);
   }
-
-
+  
   /**
    * Attempt to load the slider client resource. If the
    * resource is not on the CP an empty config is returned.
    * @return a config
    */
-  public static Configuration loadClientConfigurationResource() {
-    return ConfigHelper.loadFromResource(SliderKeys.CLIENT_RESOURCE);
+  public static Configuration loadSliderClientXML() {
+    return ConfigHelper.loadFromResource(SliderKeys.SLIDER_CLIENT_XML);
   }
 
   /**
@@ -1350,6 +1506,7 @@ public final class SliderUtils {
   public static ClasspathConstructor buildClasspath(String sliderConfDir,
       String libdir,
       Configuration config,
+      SliderFileSystem sliderFileSystem,
       boolean usingMiniMRCluster) {
 
     ClasspathConstructor classpath = new ClasspathConstructor();
@@ -1364,8 +1521,15 @@ public final class SliderUtils {
         classpath.addClassDirectory(sliderConfDir);
       }
       classpath.addLibDir(libdir);
+      if (sliderFileSystem.isFile(sliderFileSystem.getDependencyTarGzip())) {
+        classpath.addLibDir(SliderKeys.SLIDER_DEPENDENCY_LOCALIZED_DIR_LINK);
+      } else {
+        log.info(
+            "For faster submission of apps, upload dependencies using cmd {} {}",
+            SliderActions.ACTION_DEPENDENCY, Arguments.ARG_UPLOAD);
+      }
       classpath.addRemoteClasspathEnvVar();
-      classpath.append(ApplicationConstants.Environment.HADOOP_CONF_DIR.$());
+      classpath.append(ApplicationConstants.Environment.HADOOP_CONF_DIR.$$());
     }
     return classpath;
   }
@@ -1597,9 +1761,9 @@ public final class SliderUtils {
   /**
    * Truncate the given string to a maximum length provided
    * with a pad (...) added to the end if expected size if more than 10.
-   * @param toTruncate
-   * @param maxSize
-   * @return
+   * @param toTruncate string to truncate; may be null
+   * @param maxSize maximum size
+   * @return the truncated/padded string. 
    */
   public static String truncate(String toTruncate, int maxSize) {
     if (toTruncate == null || maxSize < 1
@@ -1614,6 +1778,19 @@ public final class SliderUtils {
     return toTruncate.substring(0, maxSize - pad.length()).concat(pad);
   }
 
+  /**
+   * Get a string node label value from a node report
+   * @param report node report
+   * @return a single trimmed label or ""
+   */
+  public static String extractNodeLabel(NodeReport report) {
+    Set<String> newlabels = report.getNodeLabels();
+    if (newlabels != null && !newlabels.isEmpty()) {
+      return newlabels.iterator().next().trim();
+    } else {
+      return "";
+    }
+  }
 
   /**
    * Callable for async/scheduled halt
@@ -1658,7 +1835,139 @@ public final class SliderUtils {
   }
 
   /**
-   * This wrapps ApplicationReports and generates a string version
+   * Given a source folder create zipped file
+   *
+   * @param srcFolder
+   * @param zipFile
+   *
+   * @throws IOException
+   */
+  public static void zipFolder(File srcFolder, File zipFile) throws IOException {
+    log.info("Zipping folder {} to {}", srcFolder.getAbsolutePath(), zipFile.getAbsolutePath());
+    List<String> files = new ArrayList<>();
+    generateFileList(files, srcFolder, srcFolder, true);
+
+    byte[] buffer = new byte[1024];
+
+    try (FileOutputStream fos = new FileOutputStream(zipFile)) {
+      try (ZipOutputStream zos = new ZipOutputStream(fos)) {
+
+        for (String file : files) {
+          ZipEntry ze = new ZipEntry(file);
+          zos.putNextEntry(ze);
+          try (FileInputStream in = new FileInputStream(srcFolder + File.separator + file)) {
+            int len;
+            while ((len = in.read(buffer)) > 0) {
+              zos.write(buffer, 0, len);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Given a source folder create a tar.gz file
+   * 
+   * @param srcFolder
+   * @param tarGzipFile
+   * 
+   * @throws IOException
+   */
+  public static void tarGzipFolder(File srcFolder, File tarGzipFile,
+      FilenameFilter filter) throws IOException {
+    log.info("Tar-gzipping folder {} to {}", srcFolder.getAbsolutePath(),
+        tarGzipFile.getAbsolutePath());
+    List<String> files = new ArrayList<>();
+    generateFileList(files, srcFolder, srcFolder, true, filter);
+
+    TarArchiveOutputStream taos = null;
+    try {
+      taos = new TarArchiveOutputStream(new GZIPOutputStream(
+          new BufferedOutputStream(new FileOutputStream(tarGzipFile))));
+      for (String file : files) {
+        File srcFile = new File(srcFolder, file);
+        TarArchiveEntry tarEntry = new TarArchiveEntry(
+            srcFile, file);
+        taos.putArchiveEntry(tarEntry);
+        FileInputStream in = new FileInputStream(srcFile);
+        try {
+          org.apache.commons.io.IOUtils.copy(in, taos);
+        } finally {
+          if (in != null) {
+            in.close();
+          }
+        }
+        taos.flush();
+        taos.closeArchiveEntry();
+      }
+    } finally {
+      if (taos != null) {
+        taos.close();
+      }
+    }
+  }
+
+  /**
+   * Retrieve the HDP version if it is an HDP cluster, or null otherwise
+   * 
+   * @return HDP version
+   */
+  public static String getHdpVersion() {
+    return System.getenv(SliderKeys.HDP_VERSION_PROP_NAME);
+  }
+
+  /**
+   * Query to find if it is an HDP cluster
+   * 
+   * @return true if this is invoked in an HDP cluster or false otherwise
+   */
+  public static boolean isHdp() {
+    return StringUtils.isNotEmpty(getHdpVersion()) ? true : false;
+  }
+
+  /**
+   * Retrieve the version of the current Slider install
+   * 
+   * @return the version string of the Slider release
+   */
+  public static String getSliderVersion() {
+    if (isHdp()) {
+      return getHdpVersion();
+    } else {
+      Properties props = SliderVersionInfo.loadVersionProperties();
+      return props.getProperty(SliderVersionInfo.APP_VERSION);
+    }
+  }
+
+  private static void generateFileList(List<String> fileList, File node,
+      File rootFolder, Boolean relative) {
+    generateFileList(fileList, node, rootFolder, relative, null);
+  }
+
+  private static void generateFileList(List<String> fileList, File node,
+      File rootFolder, Boolean relative, FilenameFilter filter) {
+    if (node.isFile()) {
+      String fileFullPath = node.toString();
+      if (relative) {
+        fileList.add(fileFullPath.substring(rootFolder.toString().length() + 1,
+            fileFullPath.length()));
+      } else {
+        fileList.add(fileFullPath);
+      }
+    }
+
+    if (node.isDirectory()) {
+      String[] subNode = node.list(filter);
+      for (String filename : subNode) {
+        generateFileList(fileList, new File(node, filename), rootFolder,
+            relative, filter);
+      }
+    }
+  }
+
+  /**
+   * This wraps ApplicationReports and generates a string version
    * iff the toString() operator is invoked
    */
   public static class OnDemandReportStringifier {
@@ -1734,10 +2043,17 @@ public final class SliderUtils {
       errorText.append("No native IO library. ");
     }
     try {
+<<<<<<< HEAD
       String path = Shell.getQualifiedBinPath("winutils.exe");
       log.debug("winutils is at {}", path);
     } catch (IOException e) {
       errorText.append("No WINUTILS.EXE. ");
+=======
+      String path = Shell.getQualifiedBinPath(WINUTILS);
+      log.debug("winutils is at {}", path);
+    } catch (IOException e) {
+      errorText.append("No " + WINUTILS);
+>>>>>>> refs/remotes/apache/develop
       log.warn("No winutils: {}", e, e);
     }
     try {
@@ -2016,6 +2332,20 @@ public final class SliderUtils {
   }
 
   /**
+   * return the HDFS path where the application package has been uploaded
+   * manually or by using slider client (install package command)
+   * 
+   * @param conf configuration
+   * @return
+   */
+  public static String getApplicationDefinitionPath(ConfTreeOperations conf)
+      throws BadConfigException {
+    String appDefPath = conf.getGlobalOptions().getMandatoryOption(
+        AgentKeys.APP_DEF);
+    return appDefPath;
+  }
+
+  /**
    * return the path to the slider-client.xml used by the current running
    * slider command
    *
@@ -2025,7 +2355,8 @@ public final class SliderUtils {
    */
   public static String getClientConfigPath() {
     URL path = ConfigHelper.class.getClassLoader().getResource(
-        SliderKeys.CLIENT_RESOURCE);
+        SliderKeys.SLIDER_CLIENT_XML);
+    Preconditions.checkNotNull(path, "Failed to locate resource " + SliderKeys.SLIDER_CLIENT_XML);
     return path.toString();
   }
 
@@ -2037,7 +2368,7 @@ public final class SliderUtils {
    */
   public static void validateClientConfigFile() throws IOException {
     URL resURL = SliderVersionInfo.class.getClassLoader().getResource(
-        SliderKeys.CLIENT_RESOURCE);
+        SliderKeys.SLIDER_CLIENT_XML);
     if (resURL == null) {
       throw new IOException(
           "slider-client.xml doesn't exist on the path: "
@@ -2162,7 +2493,44 @@ public final class SliderUtils {
    * @return +ve if x is less than y, -ve if y is greater than x; 0 for equality
    */
   public static int compareTwoLongsReverse(long x, long y) {
-    return (x < y) ? +1 : ((x == y) ? 0 : -1);
+    return (x < y) ? 1 : ((x == y) ? 0 : -1);
   }
-  
+
+  public static String getSystemEnv(String property) {
+    return System.getenv(property);
+  }
+
+  public static Map<String, String> getSystemEnv() {
+    return System.getenv();
+  }
+
+  public static String requestToString(AMRMClient.ContainerRequest request) {
+    Preconditions.checkArgument(request != null, "Null request");
+    StringBuilder buffer = new StringBuilder(request.toString());
+    buffer.append("; ");
+    buffer.append("relaxLocality=").append(request.getRelaxLocality()).append("; ");
+    String labels = request.getNodeLabelExpression();
+    if (labels != null) {
+      buffer.append("nodeLabels=").append(labels).append("; ");
+    }
+    List<String> nodes = request.getNodes();
+    if (nodes != null) {
+      buffer.append("Nodes = [ ");
+      int size = nodes.size();
+      for (int i = 0; i < Math.min(NODE_LIST_LIMIT, size); i++) {
+        buffer.append(nodes.get(i)).append(' ');
+      }
+      if (size > NODE_LIST_LIMIT) {
+        buffer.append(String.format("...(total %d entries)", size));
+      }
+      buffer.append("]; ");
+    }
+    List<String> racks = request.getRacks();
+    if (racks != null) {
+      buffer.append("racks = [")
+          .append(join(racks, ", ", false))
+          .append("]; ");
+    }
+    return buffer.toString();
+  }
 }

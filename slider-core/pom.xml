@@ -23,7 +23,11 @@
   <parent>
     <groupId>org.apache.slider</groupId>
     <artifactId>slider</artifactId>
+<<<<<<< HEAD
     <version>0.60.0-incubating</version>
+=======
+    <version>0.90.0-incubating-SNAPSHOT</version>
+>>>>>>> refs/remotes/apache/develop
   </parent>
 
   <build>
@@ -225,6 +229,7 @@
     <dependency>
       <groupId>org.codehaus.groovy</groupId>
       <artifactId>groovy-all</artifactId>
+      <classifier>indy</classifier>
       <scope>test</scope>
     </dependency>
 
@@ -258,6 +263,19 @@
       <scope>compile</scope>
     </dependency>
 
+<!-- if the move to hadoop-hdfs-client JAR causes problems insert this
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-hdfs</artifactId>
+      <scope>compile</scope>
+    </dependency>
+-->
+
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-hdfs</artifactId>
+    </dependency>
+
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-yarn-client</artifactId>
@@ -281,7 +299,6 @@
       <artifactId>hadoop-minicluster</artifactId>
       <scope>test</scope>
     </dependency>
-
 
     <dependency>
       <groupId>junit</groupId>
@@ -320,6 +337,16 @@
     </dependency>
 
     <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpclient</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpcore</artifactId>
+    </dependency>
+
+    <dependency>
       <groupId>commons-lang</groupId>
       <artifactId>commons-lang</artifactId>
     </dependency>
@@ -332,6 +359,18 @@
     <dependency>
       <groupId>com.codahale.metrics</groupId>
       <artifactId>metrics-core</artifactId>
+    </dependency>
+
+<!--
+    <dependency>
+      <groupId>com.codahale.metrics</groupId>
+      <artifactId>metrics-ganglia</artifactId>
+    </dependency>
+-->
+
+    <dependency>
+      <groupId>com.codahale.metrics</groupId>
+      <artifactId>metrics-servlets</artifactId>
     </dependency>
     
     <!-- ======================================================== -->
@@ -348,6 +387,14 @@
       <artifactId>curator-framework</artifactId>
     </dependency>
 
+    <!-- not directly needed by the registry, but inserted to
+        retain control over which version is on the classpath.
+        Otherwise, slider-core gets the version Hadoop-common depends on -->
+    <dependency>
+      <groupId>org.apache.curator</groupId>
+      <artifactId>curator-recipes</artifactId>
+    </dependency>
+
     <dependency>
       <groupId>org.apache.zookeeper</groupId>
       <artifactId>zookeeper</artifactId>
@@ -360,11 +407,6 @@
     <dependency>
       <groupId>javax.servlet</groupId>
       <artifactId>servlet-api</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>javax.ws.rs</groupId>
-      <artifactId>jsr311-api</artifactId>
     </dependency>
 
     <dependency>
@@ -385,6 +427,12 @@
     <dependency>
       <groupId>com.sun.jersey</groupId>
       <artifactId>jersey-server</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>com.sun.jersey.contribs</groupId>
+      <artifactId>jersey-apache-client</artifactId>
+      <scope>test</scope>
     </dependency>
 
     <dependency>
@@ -481,6 +529,11 @@
       <scope>test</scope>
     </dependency>
 
+    <dependency>
+      <groupId>asm</groupId>
+      <artifactId>asm</artifactId>
+    </dependency>
+
   </dependencies>
 
 
@@ -547,6 +600,7 @@
                 <exclude>**/*.json</exclude>
                 <exclude>src/test/python/agent.ini</exclude>
                 <exclude>src/test/python/version</exclude>
+                <exclude>**/THIRD-PARTY.properties</exclude>
                 <exclude>src/main/resources/webapps/slideram/.keep</exclude>
                 <exclude>src/main/resources/webapps/slideragent/.keep</exclude>
                 <exclude>src/main/resources/webapps/static/yarn.dt.plugins.js</exclude>

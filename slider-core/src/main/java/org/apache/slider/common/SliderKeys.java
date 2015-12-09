@@ -24,11 +24,13 @@ package org.apache.slider.common;
  */
 public interface SliderKeys extends SliderXmlConfKeys {
 
-  
+  /**
+   * This is the name of the slider appmaster in configurations :{@value}
+   */
   String COMPONENT_AM = "slider-appmaster";
   
   /**
-   * Slider role is "special"
+   * Slider role is "special":{@value}
    */
   int ROLE_AM_PRIORITY_INDEX = 0;
   
@@ -38,6 +40,21 @@ public interface SliderKeys extends SliderXmlConfKeys {
    * {@value}
    */
   String SLIDER_BASE_DIRECTORY = ".slider";
+
+  /**
+   * The paths under which Slider AM dependency libraries are stored
+   */
+  String SLIDER_DEPENDENCY_LOCALIZED_DIR_LINK = "slider_dep";
+  String SLIDER_DEPENDENCY_HDP_PARENT_DIR = "/hdp";
+  String SLIDER_DEPENDENCY_DIR = "/apps/%s/slider";
+  String SLIDER_DEPENDENCY_TAR_GZ_FILE_NAME = "slider";
+  String SLIDER_DEPENDENCY_TAR_GZ_FILE_EXT = ".tar.gz";
+  String SLIDER_DEPENDENCY_DIR_PERMISSIONS = "755";
+
+  /**
+   * 
+   */
+  String HDP_VERSION_PROP_NAME = "HDP_VERSION";
 
   /**
    *  name of the relative path to expaned an image into:  {@value}.
@@ -51,6 +68,18 @@ public interface SliderKeys extends SliderXmlConfKeys {
    * Application type for YARN  {@value}
    */
   String APP_TYPE = "org-apache-slider";
+
+  /**
+   * Key for application version. This must be set in app_config/global {@value}
+   */
+  String APP_VERSION = "site.global.app_version";
+  String APP_VERSION_UNKNOWN = "awaiting heartbeat...";
+
+  /**
+   * Keys for application container specific properties, like release timeout
+   */
+  String APP_CONTAINER_RELEASE_TIMEOUT = "site.global.app_container.release_timeout_secs";
+  int APP_CONTAINER_HEARTBEAT_INTERVAL_SEC = 10; // look for HEARTBEAT_IDDLE_INTERVAL_SEC
 
   /**
    * JVM arg to force IPv4  {@value}
@@ -110,7 +139,7 @@ public interface SliderKeys extends SliderXmlConfKeys {
    * {@value}
    */
   String SLIDER_XML = "org/apache/slider/slider.xml";
-
+  
   String CLUSTER_DIRECTORY = "cluster";
 
   String PACKAGE_DIRECTORY = "package";
@@ -156,22 +185,31 @@ public interface SliderKeys extends SliderXmlConfKeys {
    * name of the Slider client resource
    * loaded when the service is loaded.
    */
-  String CLIENT_RESOURCE = "slider-client.xml";
+  String SLIDER_CLIENT_XML = "slider-client.xml";
 
   /**
    * The name of the resource to put on the classpath
-   * This only goes up on a real cluster, not a test run.
    */
-  String SERVER_RESOURCE = "slider-server.xml";
+  String SLIDER_SERVER_XML = "slider-server.xml";
 
   String TMP_LOGDIR_PREFIX = "/tmp/slider-";
   String TMP_DIR_PREFIX = "tmp";
   String AM_DIR_PREFIX = "appmaster";
-  
+
+  /**
+   * Store the default app definition, e.g. metainfo file or content of a folder
+   */
+  String APP_DEF_DIR = "appdef";
+  /**
+   * Store additional app defs - co-processors
+   */
+  String ADDONS_DIR = "addons";
+
   String SLIDER_JAR = "slider.jar";
   String JCOMMANDER_JAR = "jcommander.jar";
   String GSON_JAR = "gson.jar";
   String AGENT_TAR = "slider-agent.tar.gz";
+  String DEFAULT_APP_PKG = "appPkg.zip";
 
   String DEFAULT_JVM_HEAP = "256M";
   int DEFAULT_YARN_MEMORY = 256;
@@ -196,6 +234,21 @@ public interface SliderKeys extends SliderXmlConfKeys {
   String CRT_PASS_FILE_NAME = "pass.txt";
   String PASS_LEN = "50";
 
+  String COMP_STORES_REQUIRED_KEY =
+      "slider.component.security.stores.required";
+  String COMP_KEYSTORE_PASSWORD_PROPERTY_KEY =
+      "slider.component.keystore.password.property";
+  String COMP_KEYSTORE_PASSWORD_ALIAS_KEY =
+      "slider.component.keystore.credential.alias.property";
+  String COMP_KEYSTORE_PASSWORD_ALIAS_DEFAULT =
+      "component.keystore.credential.alias";
+  String COMP_TRUSTSTORE_PASSWORD_PROPERTY_KEY =
+      "slider.component.truststore.password.property";
+  String COMP_TRUSTSTORE_PASSWORD_ALIAS_KEY =
+      "slider.component.truststore.credential.alias.property";
+  String COMP_TRUSTSTORE_PASSWORD_ALIAS_DEFAULT =
+      "component.truststore.credential.alias";
+
   /**
    * Python specific
    */
@@ -208,7 +261,12 @@ public interface SliderKeys extends SliderXmlConfKeys {
   String AM_FILTER_NAME =
       "org.apache.hadoop.yarn.server.webproxy.amfilter.AmFilterInitializer";
 
+  /**
+   * Allowed port range. This MUST be set in app_conf/global.
+   * {@value}
+   */
   String KEY_ALLOWED_PORT_RANGE = "site.global.slider.allowed.ports";
+  
   /**
    * Allowed port range
    */
@@ -220,4 +278,5 @@ public interface SliderKeys extends SliderXmlConfKeys {
   String SLIDER_JVM_OPTS = "SLIDER_JVM_OPTS";
 
   String SLIDER_CLASSPATH_EXTRA = "SLIDER_CLASSPATH_EXTRA";
+  String YARN_CONTAINER_PATH = "/node/container/";
 }

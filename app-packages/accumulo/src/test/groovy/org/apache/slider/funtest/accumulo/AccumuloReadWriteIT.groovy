@@ -20,6 +20,7 @@ package org.apache.slider.funtest.accumulo
 import groovy.util.logging.Slf4j
 import org.apache.accumulo.core.cli.BatchWriterOpts
 import org.apache.accumulo.core.cli.ScannerOpts
+import org.apache.accumulo.core.client.ClientConfiguration
 import org.apache.accumulo.core.client.Connector
 import org.apache.accumulo.core.client.ZooKeeperInstance
 import org.apache.accumulo.core.client.security.tokens.PasswordToken
@@ -28,7 +29,6 @@ import org.apache.accumulo.test.VerifyIngest
 import org.apache.hadoop.registry.client.api.RegistryConstants
 import org.apache.slider.api.ClusterDescription
 import org.apache.slider.client.SliderClient
-import org.apache.slider.common.SliderXmlConfKeys
 import org.apache.slider.funtest.framework.FuntestProperties
 
 import java.util.concurrent.atomic.AtomicBoolean
@@ -53,8 +53,11 @@ class AccumuloReadWriteIT extends AccumuloBasicIT {
           RegistryConstants.KEY_REGISTRY_ZK_QUORUM,
         FuntestProperties.DEFAULT_SLIDER_ZK_HOSTS)
 
-      ZooKeeperInstance instance = new ZooKeeperInstance(
-        tree.global.get("site.client.instance.name"), zookeepers)
+      ClientConfiguration configuration = new ClientConfiguration()
+      configuration.setProperty(ClientConfiguration.ClientProperty.INSTANCE_ZK_HOST, zookeepers)
+      configuration.setProperty(ClientConfiguration.ClientProperty.INSTANCE_NAME, tree.global.get("site.client.instance.name"))
+
+      ZooKeeperInstance instance = new ZooKeeperInstance(configuration)
       Connector connector = instance.getConnector(USER, new PasswordToken(PASSWORD))
 
       ingest(connector, 200000, 1, 50, 0);
@@ -71,6 +74,7 @@ class AccumuloReadWriteIT extends AccumuloBasicIT {
 
   public static void ingest(Connector connector, int rows, int cols, int width, int offset) throws Exception {
     TestIngest.Opts opts = new TestIngest.Opts();
+    opts.setPrincipal(USER);
     opts.rows = rows;
     opts.cols = cols;
     opts.dataSize = width;
@@ -83,6 +87,7 @@ class AccumuloReadWriteIT extends AccumuloBasicIT {
   public static void verify(Connector connector, int rows, int cols, int width, int offset) throws Exception {
     ScannerOpts scannerOpts = new ScannerOpts();
     VerifyIngest.Opts opts = new VerifyIngest.Opts();
+    opts.setPrincipal(USER);
     opts.rows = rows;
     opts.cols = cols;
     opts.dataSize = width;

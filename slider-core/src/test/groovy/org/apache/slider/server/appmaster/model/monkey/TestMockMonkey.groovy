@@ -54,7 +54,7 @@ class TestMockMonkey extends BaseMockAppStateTest {
     def configuration = new YarnConfiguration()
     queues = new QueueService();
     queues.init(configuration)
-    monkey = new ChaosMonkeyService(metricRegistry, queues)
+    monkey = new ChaosMonkeyService(metrics.metrics, queues)
     monkey.init(configuration)
   }
   
@@ -148,7 +148,7 @@ class TestMockMonkey extends BaseMockAppStateTest {
   public void testContainerKillerIgnoresAM() throws Throwable {
 
     addAppMastertoAppState()
-    assert 1 == appState.liveNodes.size()
+    assert 1 == appState.liveContainers.size()
     
     def chaos = new ChaosKillContainer(appState,
         queues,

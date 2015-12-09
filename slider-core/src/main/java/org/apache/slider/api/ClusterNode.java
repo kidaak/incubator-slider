@@ -36,13 +36,13 @@ import java.io.IOException;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL )
-public class ClusterNode {
+public final class ClusterNode implements Cloneable {
   protected static final Logger
-    LOG = LoggerFactory.getLogger(ClusterDescription.class);
+    LOG = LoggerFactory.getLogger(ClusterNode.class);
   
   @JsonIgnore
   public ContainerId containerId;
-  
+
   /**
    * server name
    */
@@ -67,8 +67,7 @@ public class ClusterNode {
   public boolean released;
   public String host;
   public String hostUrl;
-  
-  
+
   /**
    * state from {@link ClusterDescription}
    */
@@ -102,11 +101,13 @@ public class ClusterNode {
 
   /**
    * server-side ctor takes the container ID and builds the name from it
-   * @param containerId container ID
+   * @param containerId container ID; can be null
    */
   public ClusterNode(ContainerId containerId) {
-    this.containerId = containerId;
-    this.name = containerId.toString();
+    if (containerId != null) {
+      this.containerId = containerId;
+      this.name = containerId.toString();
+    }
   }
 
   /**
@@ -163,7 +164,7 @@ public class ClusterNode {
     try {
       return mapper.readValue(json, ClusterNode.class);
     } catch (IOException e) {
-      LOG.error("Exception while parsing json : " + e + "\n" + json, e);
+      LOG.error("Exception while parsing json : {}\n{}", e , json, e);
       throw e;
     }
   }
@@ -171,7 +172,7 @@ public class ClusterNode {
   /**
    * Build from a protobuf response
    * @param message
-   * @return
+   * @return the deserialized node
    */
   public static ClusterNode fromProtobuf(Messages.RoleInstanceState message) {
     ClusterNode node = new ClusterNode();
@@ -194,10 +195,24 @@ public class ClusterNode {
     node.roleId = message.getRoleId();
     node.state = message.getState();
     node.host = message.getHost();
-//    node.hostUrl = message.getHostURL();
+    node.hostUrl = message.getHostURL();
     node.createTime = message.getCreateTime();
     node.startTime = message.getStartTime();
     node.released = message.getReleased();
     return node;
+  }
+
+  @Override
+  public Object clone() throws CloneNotSupportedException {
+    return super.clone();
+  }
+  
+  public ClusterNode doClone() {
+    try {
+      return (ClusterNode)clone();
+    } catch (CloneNotSupportedException e) {
+      //not going to happen. This is a final class
+      return null;
+    }
   }
 }

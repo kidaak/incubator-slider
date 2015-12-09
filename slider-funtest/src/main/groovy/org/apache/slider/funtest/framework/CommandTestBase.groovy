@@ -19,25 +19,27 @@
 package org.apache.slider.funtest.framework
 
 import groovy.transform.CompileStatic
+import org.apache.commons.lang.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem as HadoopFS
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hdfs.HdfsConfiguration
 import org.apache.hadoop.registry.client.api.RegistryConstants
 import org.apache.hadoop.util.ExitUtil
 import org.apache.hadoop.util.Shell
 import org.apache.hadoop.yarn.api.records.YarnApplicationState
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.slider.api.StatusKeys
-import org.apache.slider.common.tools.ConfigHelper
-import org.apache.slider.core.launch.SerializedApplicationReport
-import org.apache.slider.core.main.ServiceLauncher
+import org.apache.slider.api.types.NodeInformationList
+import org.apache.slider.client.SliderClient
 import org.apache.slider.common.SliderKeys
 import org.apache.slider.common.SliderXmlConfKeys
 import org.apache.slider.api.ClusterDescription
+import org.apache.slider.common.tools.ConfigHelper
 import org.apache.slider.common.tools.SliderUtils
-import org.apache.slider.client.SliderClient
+import org.apache.slider.core.launch.SerializedApplicationReport
+import org.apache.slider.core.main.ServiceLauncher
 import org.apache.slider.core.persist.ApplicationReportSerDeser
+import org.apache.slider.core.persist.JsonSerDeser
 import org.apache.slider.test.SliderTestUtils
 import org.apache.slider.test.Outcome;
 
@@ -47,6 +49,9 @@ import org.junit.Rule
 import org.junit.rules.Timeout
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+
+import javax.net.ssl.SSLException
+
 import static org.apache.slider.common.SliderExitCodes.*
 import static org.apache.slider.core.main.LauncherExitCodes.*
 import static org.apache.slider.funtest.framework.FuntestProperties.*
@@ -74,7 +79,7 @@ abstract class CommandTestBase extends SliderTestUtils {
   public static final File SLIDER_CONF_XML = new File(SLIDER_CONF_DIRECTORY,
       CLIENT_CONFIG_FILENAME).canonicalFile
   public static final YarnConfiguration SLIDER_CONFIG
-  public static final int THAW_WAIT_TIME
+  public static int THAW_WAIT_TIME
   public static final int FREEZE_WAIT_TIME
 
   public static final int SLIDER_TEST_TIMEOUT
@@ -85,7 +90,6 @@ abstract class CommandTestBase extends SliderTestUtils {
    * Keytab for secure cluster
    */
   public static final String TEST_AM_KEYTAB
-  static File keytabFile
 
   /**
    * shell-escaped ~ symbol. On windows this does
@@ -93,8 +97,8 @@ abstract class CommandTestBase extends SliderTestUtils {
    */
   public static final String TILDE
   public static final int CONTAINER_LAUNCH_TIMEOUT = 90000
-  public static final int PROBE_SLEEP_TIME = 4000
-  public static final int REGISTRY_STARTUP_TIMEOUT = 60000
+  public static final int PROBE_SLEEP_TIME = 2000
+  public static final int REGISTRY_STARTUP_TIMEOUT = 90000
   public static final String E_LAUNCH_FAIL = 'Application did not start'
 
   /*
@@ -102,7 +106,7 @@ abstract class CommandTestBase extends SliderTestUtils {
   (which it may) the class will not be instantiable.
    */
   static {
-    new HdfsConfiguration()
+    ConfigHelper.injectSliderXMLResource()
     ConfigHelper.registerDeprecatedConfigItems();
     SLIDER_CONFIG = ConfLoader.loadSliderConf(SLIDER_CONF_XML, true);
     THAW_WAIT_TIME = getTimeOptionMillis(SLIDER_CONFIG,
@@ -121,8 +125,6 @@ abstract class CommandTestBase extends SliderTestUtils {
 
     TEST_AM_KEYTAB = SLIDER_CONFIG.getTrimmed(
         KEY_TEST_AM_KEYTAB)
-    
-    
 
     TILDE = Shell.WINDOWS? "~" : "\\~" 
   }
@@ -137,11 +139,10 @@ abstract class CommandTestBase extends SliderTestUtils {
 
     SliderShell.confDir = SLIDER_CONF_DIRECTORY
     
-    // choose python script if on windows or the launch key recommends it
+    // choose python script if on windows
     // 
-    boolean python = SLIDER_CONFIG.getBoolean(KEY_LAUNCH_PYTHON, false)
     SliderShell.scriptFile =
-        (SliderShell.windows || python) ? SLIDER_SCRIPT_PYTHON : SLIDER_SCRIPT
+        SliderShell.windows ? SLIDER_SCRIPT_PYTHON : SLIDER_SCRIPT
     
     //set the property of the configuration directory
     def path = SLIDER_CONF_DIRECTORY.absolutePath
@@ -207,7 +208,7 @@ abstract class CommandTestBase extends SliderTestUtils {
       return false;
     }
   }
-  
+
   /**
    * Add a jar to the slider classpath by looking up a class and determining
    * its containing JAR
@@ -289,13 +290,13 @@ abstract class CommandTestBase extends SliderTestUtils {
 
   static SliderShell destroy(String name) {
     slider([
-        ACTION_DESTROY, name
+        ACTION_DESTROY, name, ARG_FORCE
     ])
   }
 
   static SliderShell destroy(int result, String name) {
     slider(result, [
-        ACTION_DESTROY, name
+        ACTION_DESTROY, name, ARG_FORCE
     ])
   }
 
@@ -326,7 +327,6 @@ abstract class CommandTestBase extends SliderTestUtils {
     ])
   }
 
-
   static SliderShell freeze(
       int exitCode,
       String name,
@@ -348,12 +348,21 @@ abstract class CommandTestBase extends SliderTestUtils {
     freeze(name, [ARG_FORCE, ARG_WAIT, "10000"])
   }
 
+  /**
+   * Non-forced stop, wait some seconds
+   * @param name
+   * @return
+   */
+  static SliderShell stop(String name) {
+    freeze(name, [ARG_WAIT, "10000"])
+  }
+
   static SliderShell killContainer(String name, String containerID) {
     slider(0,
         [
-            ACTION_KILL_CONTAINER,
-            name,
-            containerID
+          ACTION_KILL_CONTAINER,
+          name,
+          containerID
         ])
   }
 
@@ -432,9 +441,7 @@ abstract class CommandTestBase extends SliderTestUtils {
   }
 
   static SliderShell registry(Collection<String> commands) {
-    slider(0,
-        [ACTION_REGISTRY] + commands
-    )
+    slider(0, [ACTION_REGISTRY] + commands)
   }
 
   /**
@@ -564,7 +571,7 @@ abstract class CommandTestBase extends SliderTestUtils {
     List<String> argsList = [action, clustername]
 
     argsList << ARG_ZKHOSTS <<
-    SLIDER_CONFIG.getTrimmed(RegistryConstants.KEY_REGISTRY_ZK_QUORUM)
+      SLIDER_CONFIG.getTrimmed(RegistryConstants.KEY_REGISTRY_ZK_QUORUM)
 
 
     if (blockUntilRunning) {
@@ -615,6 +622,93 @@ abstract class CommandTestBase extends SliderTestUtils {
   }
 
   /**
+<<<<<<< HEAD
+   * Create a templated slider app.
+   * <p>
+   * If the extraArgs list does not contain a --wait parm then a wait 
+=======
+   * Create a slider app using the alternate packaging capability
+   * <p>
+   * If the extraArgs list does not contain a --wait parm then a wait
+>>>>>>> refs/remotes/apache/develop
+   * duration of THAW_WAIT_TIME will be added to the launch args.
+   * @param name name
+   * @param metaInfo application metaInfo
+   * @param appTemplate application template
+   * @param resourceTemplate resource template
+   * @param extraArgs list of extra arguments to the command
+   * @param launchReportFile optional file to save the AM launch report to
+<<<<<<< HEAD
+=======
+   * @return the shell
+   */
+  public SliderShell createSliderApplicationMinPkg(
+      String name,
+      String metaInfo,
+      String resourceTemplate,
+      String appTemplate,
+      List<String> extraArgs = [],
+      File launchReportFile = null) {
+
+    if (!launchReportFile) {
+      launchReportFile = createTempJsonFile()
+    }
+    // delete any previous copy of the file
+    launchReportFile.delete();
+
+    List<String> commands = [
+        ACTION_CREATE, name,
+        ARG_METAINFO, metaInfo,
+        ARG_OUTPUT, launchReportFile.absolutePath
+    ]
+
+    if (StringUtils.isNotBlank(appTemplate)) {
+      commands << ARG_TEMPLATE << appTemplate
+    }
+    if (StringUtils.isNotBlank(resourceTemplate)) {
+      commands << ARG_RESOURCES << resourceTemplate
+    }
+    if (!extraArgs.contains(ARG_WAIT)) {
+      commands << ARG_WAIT << Integer.toString(THAW_WAIT_TIME)
+    }
+
+    maybeAddCommandOption(commands,
+        [ARG_COMP_OPT, SliderKeys.COMPONENT_AM, SliderXmlConfKeys.KEY_AM_LOGIN_KEYTAB_NAME],
+        SLIDER_CONFIG.getTrimmed(SliderXmlConfKeys.KEY_AM_LOGIN_KEYTAB_NAME));
+    maybeAddCommandOption(commands,
+        [ARG_COMP_OPT, SliderKeys.COMPONENT_AM, SliderXmlConfKeys.KEY_HDFS_KEYTAB_DIR],
+        SLIDER_CONFIG.getTrimmed(SliderXmlConfKeys.KEY_HDFS_KEYTAB_DIR));
+    maybeAddCommandOption(commands,
+        [ARG_COMP_OPT, SliderKeys.COMPONENT_AM, SliderXmlConfKeys.KEY_AM_KEYTAB_LOCAL_PATH],
+        SLIDER_CONFIG.getTrimmed(SliderXmlConfKeys.KEY_AM_KEYTAB_LOCAL_PATH));
+    maybeAddCommandOption(commands,
+        [ARG_COMP_OPT, SliderKeys.COMPONENT_AM, SliderXmlConfKeys.KEY_KEYTAB_PRINCIPAL],
+        SLIDER_CONFIG.getTrimmed(SliderXmlConfKeys.KEY_KEYTAB_PRINCIPAL));
+    commands.addAll(extraArgs)
+    SliderShell shell = new SliderShell(commands)
+    if (0 != shell.execute()) {
+      // app has failed.
+
+      // grab the app report of the last known instance of this app
+      // which may not be there if it was a config failure; may be out of date
+      // from a previous run
+      log.error("Launch failed with exit code ${shell.ret}")
+      shell.dumpOutput()
+
+      // now grab that app report if it is there
+      def appReport = maybeLookupFromLaunchReport(launchReportFile)
+      String extraText = ""
+      if (appReport) {
+        log.error("Application report:\n$appReport")
+        extraText = appReport.diagnostics
+      }
+
+      fail("Application Launch Failure, exit code  ${shell.ret}\n${extraText}")
+    }
+    return shell
+  }
+
+  /**
    * Create a templated slider app.
    * <p>
    * If the extraArgs list does not contain a --wait parm then a wait 
@@ -624,6 +718,7 @@ abstract class CommandTestBase extends SliderTestUtils {
    * @param resourceTemplate resource template
    * @param extraArgs list of extra arguments to the command
    * @param launchReportFile optional file to save the AM launch report to
+>>>>>>> refs/remotes/apache/develop
    * @return the shell
    */
   public SliderShell createTemplatedSliderApplication(
@@ -686,6 +781,7 @@ abstract class CommandTestBase extends SliderTestUtils {
     return shell
   }
 
+<<<<<<< HEAD
   /**
    * Create a temp JSON file. After coming up with the name, the file
    * is deleted
@@ -704,6 +800,8 @@ abstract class CommandTestBase extends SliderTestUtils {
     return reportFile
   }
 
+=======
+>>>>>>> refs/remotes/apache/develop
   /**
    * If the option is not null/empty, add the command and the option
    * @param args arg list being built up
@@ -725,20 +823,20 @@ abstract class CommandTestBase extends SliderTestUtils {
       ApplicationReportSerDeser serDeser = new ApplicationReportSerDeser()
       def report = serDeser.fromFile(reportFile)
       return report
-    }    
+    }
     return null;
-  }  
-   
+  }
+
   public static SerializedApplicationReport loadAppReport(File reportFile) {
-    if (reportFile.exists() && reportFile.length()> 0) {
+    if (reportFile.exists() && reportFile.length() > 0) {
       ApplicationReportSerDeser serDeser = new ApplicationReportSerDeser()
       def report = serDeser.fromFile(reportFile)
       return report
-    }  else {
+    }else {
       throw new FileNotFoundException(reportFile.absolutePath)
-    }  
-  }  
-  
+    }
+  }
+
   public static SerializedApplicationReport maybeLookupFromLaunchReport(File launchReport) {
     def report = maybeLoadAppReport(launchReport)
     if (report) {
@@ -769,7 +867,50 @@ abstract class CommandTestBase extends SliderTestUtils {
     }
   }
 
-  
+  /**
+   * Lookup an application, return null if loading failed
+   * @param id application ID
+   * @return an application report or null
+   */
+  public static NodeInformationList listNodes(String name = "", boolean healthy = false, String label = "") {
+    File reportFile = createTempJsonFile();
+    try {
+      def shell = nodes(name, reportFile, healthy, label)
+      if (log.isDebugEnabled()) {
+        shell.dumpOutput()
+      }
+      JsonSerDeser<NodeInformationList> serDeser = NodeInformationList.createSerializer();
+      serDeser.fromFile(reportFile)
+    } finally {
+      reportFile.delete()
+    }
+  }
+
+  /**
+   * List cluster nodes
+   * @param name of cluster or null
+   * @param out output file (or null)
+   * @param healthy list healthy nodes only
+   * @param label label to filter on
+   * @return output
+   */
+  static SliderShell nodes(String name, File out = null, boolean healthy = false, String label = "") {
+    def commands = [ACTION_NODES]
+    if (label) {
+      commands += [ ARG_LABEL, label]
+    }
+    if (name) {
+      commands << name
+    }
+    if (out) {
+      commands += [ARG_OUTPUT, out.absolutePath]
+    }
+    if (healthy) {
+      commands << ARG_HEALTHY
+    }
+    slider(0, commands)
+  }
+
   public Path buildClusterPath(String clustername) {
     return new Path(
         clusterFS.homeDirectory,
@@ -821,22 +962,34 @@ abstract class CommandTestBase extends SliderTestUtils {
   /**
    * Spinning operation to perform a registry call
    * @param application application
+<<<<<<< HEAD
    */
   protected void ensureRegistryCallSucceeds(String application) {
+=======
+   * @param target target URL For diagnostics
+   */
+  protected void ensureRegistryCallSucceeds(String application, URL target) {
+    def failureText = "Application registry is not accessible at $target after $REGISTRY_STARTUP_TIMEOUT ms"
+>>>>>>> refs/remotes/apache/develop
     repeatUntilSuccess("registry",
         this.&isRegistryAccessible,
         REGISTRY_STARTUP_TIMEOUT,
         PROBE_SLEEP_TIME,
         [application: application],
         true,
-        "Application registry is not accessible after $REGISTRY_STARTUP_TIMEOUT") {
-      describe "Not able to access registry after after $REGISTRY_STARTUP_TIMEOUT"
+        failureText) {
+      describe failureText
       exists(application, true).dumpOutput()
-      SliderShell shell = registry(0, [
-              ARG_NAME,
-              application,
-              ARG_LISTEXP
-          ])
+      if (target != null) {
+        // GET the text of the target if provided
+        def body = target.text
+        def errorText = "Registry probe to $target failed with response:\n$body"
+        log.error(errorText)
+        fail(errorText)
+      }
+
+      // trigger a failure on registry lookup
+      registry(0, [ARG_NAME, application, ARG_LISTEXP])
     }
   }
 
@@ -858,6 +1011,35 @@ abstract class CommandTestBase extends SliderTestUtils {
   }
 
   /**
+<<<<<<< HEAD
+=======
+   * Wait for an application to move out of a specific state. Don't fail this
+   * test if the application is never found to move of the state. State
+   * transitions sometimes happen so fast that short lived transient states
+   * might not caught during probes. Hence just exit success, after timeout.
+   * 
+   * @param application
+   * @param yarnState
+   */
+  protected void ensureApplicationNotInState(String application,
+    YarnApplicationState yarnState) {
+    repeatUntilSuccess("await application to be not in state " + yarnState,
+        this.&isApplicationNotInState,
+        10000,
+        0,
+        [
+          application: application,
+          yarnState: yarnState
+        ],
+        false,
+        "") {
+      describe "final state of app for not in state check"
+      exists(application).dumpOutput()
+    }
+  }
+
+  /**
+>>>>>>> refs/remotes/apache/develop
    * Is the registry accessible for an application?
    * @param args argument map containing <code>"application"</code>
    * @return probe outcome
@@ -900,6 +1082,23 @@ abstract class CommandTestBase extends SliderTestUtils {
   }
 
   /**
+<<<<<<< HEAD
+=======
+   * Probe for an application to be in a state other than the specified state;
+   * uses <code>exists</code> operation
+   * @param args argument map containing <code>"application"</code> and
+   *   <code>state</code>
+   * @return
+   */
+  protected Outcome isApplicationNotInState(Map<String, String> args) {
+    String applicationName = args['application'];
+    YarnApplicationState yarnState = YarnApplicationState
+      .valueOf(args['yarnState']);
+    return Outcome.fromBool(!isApplicationInState(applicationName, yarnState))
+  }
+
+  /**
+>>>>>>> refs/remotes/apache/develop
    * is an application in a desired yarn state. Uses the <code>exists</code>
    * CLI operation
    * @param yarnState
@@ -1067,7 +1266,6 @@ abstract class CommandTestBase extends SliderTestUtils {
   }
 
   public ClusterDescription execStatus(String application) {
-    ClusterDescription cd
     File statusFile = File.createTempFile("status", ".json")
     try {
       slider(EXIT_SUCCESS,
@@ -1121,7 +1319,11 @@ abstract class CommandTestBase extends SliderTestUtils {
       int container_launch_timeout) {
 
     repeatUntilSuccess(
+<<<<<<< HEAD
         "await container count",
+=======
+        "await requested container count",
+>>>>>>> refs/remotes/apache/develop
         this.&hasRequestedContainerCountReached,
         container_launch_timeout,
         PROBE_SLEEP_TIME,
@@ -1129,11 +1331,11 @@ abstract class CommandTestBase extends SliderTestUtils {
          role       : role,
          application: application],
         true,
-        "countainer count not reached") {
+        "requested countainer count not reached") {
       int requestedCount = queryRequestedCount(application, role)
 
-      def message = "expected count of $role = $limit not reached: $requestedCount" +
-                    " after $container_launch_timeout mS"
+      def message = "expected request count of $role = $limit not reached, " +
+                    "actual: $requestedCount after $container_launch_timeout ms"
       describe message
       ClusterDescription cd = execStatus(application);
       log.info("Parsed status \n$cd")
@@ -1141,6 +1343,13 @@ abstract class CommandTestBase extends SliderTestUtils {
     }
   }
 
+  /**
+   * Assert that exactly the number of containers are live
+   * @param clustername name of cluster
+   * @param component component to probe
+   * @param count count
+   * @return
+   */
   public ClusterDescription assertContainersLive(String clustername,
       String component,
       int count) {
@@ -1190,12 +1399,72 @@ abstract class CommandTestBase extends SliderTestUtils {
          component  : component,
          application: application],
         true,
-        "countainer count not reached") {
-      describe "container count not reached"
+        "live countainer count not reached") {
+      describe "live container count not reached"
       assertContainersLive(application, component, expected)
     }
   }
 
+<<<<<<< HEAD
+=======
+  public int queryFailedCount(String  application, String role) {
+    ClusterDescription cd = execStatus(application)
+    if (cd.statistics.size() == 0) {
+      log.debug("No statistics entries")
+    }
+    if (!cd.statistics[role]) {
+      log.debug("No stats for role $role")
+      return 0;
+    }
+    def statsForRole = cd.statistics[role]
+
+    def failed = statsForRole[StatusKeys.STATISTICS_CONTAINERS_FAILED]
+    assert null != failed
+    return failed
+  }
+
+  /**
+   * Probe: has the failed container count of a specific role been reached?
+   * @param args map with: "application", "role", "limit"
+   * @return success on a match, retry if not
+   */
+  Outcome hasFailedContainerCountReached(Map<String, String> args) {
+    String application = args['application']
+    String role = args['role']
+    int expectedCount = args['limit'].toInteger();
+
+    int failedCount = queryFailedCount(application, role)
+    log.debug("failed $role count = $failedCount; expected=$expectedCount")
+    return Outcome.fromBool(failedCount >= expectedCount)
+  }
+
+  /**
+   * Wait for the failed container count to be reached
+   * @param application application name
+   * @param component component name
+   * @param expected expected count
+   * @param container_launch_timeout launch timeout
+   */
+  void expectFailedContainerCountReached(
+      String application,
+      String component,
+      int expected,
+      int container_launch_timeout) {
+    repeatUntilSuccess(
+        "await failed container count",
+        this.&hasFailedContainerCountReached,
+        container_launch_timeout,
+        PROBE_SLEEP_TIME,
+        [limit      : Integer.toString(expected),
+         role       : component,
+         application: application],
+        true,
+        "failed countainer count not reached") {
+      describe "failed container count not reached"
+    }
+  }
+
+>>>>>>> refs/remotes/apache/develop
   /**
    * Spin for <code>REGISTRY_STARTUP_TIMEOUT</code> waiting
    * for the output of the registry command to contain the specified
@@ -1228,9 +1497,16 @@ abstract class CommandTestBase extends SliderTestUtils {
       fail(errorText + "\n" + outfile.text)
     }
   }
+<<<<<<< HEAD
   /**
    * Is the registry accessible for an application?
    * @param args argument map containing <code>"application"</code>
+=======
+ 
+  /**
+   * probe for the output {@code  command: List} containing {@code text}
+   * @param args argument map containing the required parameters
+>>>>>>> refs/remotes/apache/develop
    * @return probe outcome
    */
   protected Outcome commandOutputContains(Map args) {
@@ -1239,9 +1515,16 @@ abstract class CommandTestBase extends SliderTestUtils {
     SliderShell shell = slider(0, command)
     return Outcome.fromBool(shell.outputContains(text))
   }
+<<<<<<< HEAD
   /**
    * Is the registry accessible for an application?
    * @param args argument map containing <code>"application"</code>
+=======
+
+  /**
+   * probe for a command {@code command: List} succeeeding
+   * @param args argument map containing the required parameters
+>>>>>>> refs/remotes/apache/develop
    * @return probe outcome
    */
   protected Outcome commandSucceeds(Map args) {
@@ -1249,9 +1532,17 @@ abstract class CommandTestBase extends SliderTestUtils {
     SliderShell shell = slider(command)
     return Outcome.fromBool(shell.ret == 0)
   }
+<<<<<<< HEAD
   /**
    * Is the registry accessible for an application?
    * @param args argument map
+=======
+
+  /**
+   * probe for a command {@code command: List} generating a file 'filename'
+   * which must contain the text 'text'
+   * @param args argument map containing the required parameters
+>>>>>>> refs/remotes/apache/develop
    * @return probe outcome
    */
   protected Outcome generatedFileContains(Map args) {
@@ -1265,4 +1556,103 @@ abstract class CommandTestBase extends SliderTestUtils {
     assert f.exists()
     return Outcome.fromBool(f.text.contains(text))
   }
+<<<<<<< HEAD
+=======
+
+  /**
+   * Probe callback for is the the app root web page up.
+   * Having a securty exception is in fact legit.
+   * @param args map where 'applicationId' must be set
+   * @return the outcome
+   */
+  protected static Outcome isRootWebPageUp(
+      Map<String, String> args) {
+
+    assert args['applicationId'] != null
+    String applicationId = args['applicationId'];
+    def sar = lookupApplication(applicationId)
+    assert sar != null;
+    if (!sar.url) {
+      return Outcome.Retry;
+    }
+    try {
+      getWebPage(sar.url)
+      return Outcome.Success
+    } catch (SSLException e) {
+      // SSL exception -implies negotiation failure. At this point there is clearly something
+      // at the far end -we just don't have the credentials to trust it.
+      return Outcome.Success;
+    } catch (IOException e) {
+      return Outcome.Retry;
+    } catch (Exception e) {
+      return Outcome.Retry;
+    }
+  }
+
+  /**
+   * Await for the root web page of an app to come up
+   * @param applicationId app ID
+   * @param launch_timeout launch timeout
+   */
+  void expectRootWebPageUp(
+      String applicationId, int launch_timeout) {
+
+    repeatUntilSuccess(
+        "await root web page",
+        this.&isRootWebPageUp,
+        launch_timeout,
+        PROBE_SLEEP_TIME,
+        [
+         applicationId: applicationId
+        ],
+        false,
+        "web page not up") {
+
+      def sar = lookupApplication(applicationId)
+      assert sar != null;
+      assert sar.url
+      // this is the final failure cause
+      getWebPage(sar.url)
+    }
+  }
+
+  /**
+   * Probe callback for the the app root web page up.
+   * Raising an SSL exception is considered a sign of liveness.
+   * @param args map where 'applicationId' must be set
+   * @return the outcome
+   */
+  protected static Outcome isApplicationURLPublished(
+      Map<String, String> args) {
+
+    assert args['applicationId'] != null
+    String applicationId = args['applicationId'];
+    def sar = lookupApplication(applicationId)
+    assert sar != null;
+    return sar.url? Outcome.Success : Outcome.Retry
+  }
+
+  /**
+   * Await for the URL of an app to be listed in the application report
+   * @param applicationId app ID
+   * @param launch_timeout launch timeout
+   */
+  void awaitApplicationURLPublished(String applicationId, int launch_timeout) {
+    repeatUntilSuccess(
+        "await application URL published",
+        this.&isApplicationURLPublished,
+        launch_timeout,
+        PROBE_SLEEP_TIME,
+        [
+            applicationId: applicationId
+        ],
+        true,
+        "application URL not published") {
+
+      def sar = lookupApplication(applicationId)
+      log.error("$applicationId => $sar")
+    }
+  }
+
+>>>>>>> refs/remotes/apache/develop
 }

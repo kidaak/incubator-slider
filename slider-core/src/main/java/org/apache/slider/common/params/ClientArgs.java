@@ -50,6 +50,7 @@ public class ClientArgs extends CommonArgs {
   private final ActionAMSuicideArgs actionAMSuicideArgs = new ActionAMSuicideArgs();
   private final ActionBuildArgs actionBuildArgs = new ActionBuildArgs();
   private final ActionCreateArgs actionCreateArgs = new ActionCreateArgs();
+  private final ActionDependencyArgs actionDependencyArgs = new ActionDependencyArgs();
   private final ActionDestroyArgs actionDestroyArgs = new ActionDestroyArgs();
   private final ActionDiagnosticArgs actionDiagnosticArgs = new ActionDiagnosticArgs();
   private final ActionExistsArgs actionExistsArgs = new ActionExistsArgs();
@@ -57,18 +58,22 @@ public class ClientArgs extends CommonArgs {
   private final ActionFreezeArgs actionFreezeArgs = new ActionFreezeArgs();
   private final ActionHelpArgs actionHelpArgs = new ActionHelpArgs();
   private final ActionInstallPackageArgs actionInstallPackageArgs = new ActionInstallPackageArgs();
+  private final ActionPackageArgs actionPackageArgs = new ActionPackageArgs();
+  private final ActionClientArgs actionClientArgs = new ActionClientArgs();
   private final ActionInstallKeytabArgs actionInstallKeytabArgs = new ActionInstallKeytabArgs();
+  private final ActionKeytabArgs actionKeytabArgs = new ActionKeytabArgs();
   private final ActionKillContainerArgs actionKillContainerArgs =
     new ActionKillContainerArgs();
   private final ActionListArgs actionListArgs = new ActionListArgs();
   private final ActionLookupArgs actionLookupArgs = new ActionLookupArgs();
+  private final ActionNodesArgs actionNodesArgs = new ActionNodesArgs();
   private final ActionRegistryArgs actionRegistryArgs = new ActionRegistryArgs();
   private final ActionResolveArgs actionResolveArgs = new ActionResolveArgs();
   private final ActionStatusArgs actionStatusArgs = new ActionStatusArgs();
   private final ActionThawArgs actionThawArgs = new ActionThawArgs();
   private final ActionUpdateArgs actionUpdateArgs = new ActionUpdateArgs();
   private final ActionVersionArgs actionVersionArgs = new ActionVersionArgs();
-
+  private final ActionUpgradeArgs actionUpgradeArgs = new ActionUpgradeArgs();
 
   public ClientArgs(String[] args) {
     super(args);
@@ -84,23 +89,29 @@ public class ClientArgs extends CommonArgs {
     addActions(
         actionAMSuicideArgs,
         actionBuildArgs,
+        actionClientArgs,
         actionCreateArgs,
-        actionUpdateArgs,
+        actionDependencyArgs,
         actionDestroyArgs,
         actionDiagnosticArgs,
         actionExistsArgs,
         actionFlexArgs,
         actionFreezeArgs,
         actionHelpArgs,
-        actionInstallPackageArgs,
         actionInstallKeytabArgs,
+        actionInstallPackageArgs,
+        actionKeytabArgs,
         actionKillContainerArgs,
         actionListArgs,
         actionLookupArgs,
+        actionNodesArgs,
+        actionPackageArgs,
         actionRegistryArgs,
         actionResolveArgs,
         actionStatusArgs,
         actionThawArgs,
+        actionUpdateArgs,
+        actionUpgradeArgs,
         actionVersionArgs
     );
   }
@@ -137,18 +148,30 @@ public class ClientArgs extends CommonArgs {
     return actionBuildArgs;
   }
 
-  public ActionInstallPackageArgs getActionInstallPackageArgs() {
-    return actionInstallPackageArgs; }
+  public ActionInstallPackageArgs getActionInstallPackageArgs() { return actionInstallPackageArgs; }
 
-  public ActionInstallKeytabArgs getActionInstallKeytabArgs() {
-    return actionInstallKeytabArgs; }
+  public ActionClientArgs getActionClientArgs() { return actionClientArgs; }
+
+  public ActionPackageArgs getActionPackageArgs() { return actionPackageArgs; }
+
+  public ActionInstallKeytabArgs getActionInstallKeytabArgs() { return actionInstallKeytabArgs; }
+
+  public ActionKeytabArgs getActionKeytabArgs() { return actionKeytabArgs; }
 
   public ActionUpdateArgs getActionUpdateArgs() {
     return actionUpdateArgs;
   }
 
+  public ActionUpgradeArgs getActionUpgradeArgs() {
+    return actionUpgradeArgs;
+  }
+
   public ActionCreateArgs getActionCreateArgs() {
     return actionCreateArgs;
+  }
+
+  public ActionDependencyArgs getActionDependencyArgs() {
+    return actionDependencyArgs;
   }
 
   public ActionDestroyArgs getActionDestroyArgs() {
@@ -173,6 +196,10 @@ public class ClientArgs extends CommonArgs {
 
   public ActionListArgs getActionListArgs() {
     return actionListArgs;
+  }
+
+  public ActionNodesArgs getActionNodesArgs() {
+    return actionNodesArgs;
   }
 
   public ActionLookupArgs getActionLookupArgs() {
@@ -223,6 +250,9 @@ public class ClientArgs extends CommonArgs {
     } else if (SliderActions.ACTION_AM_SUICIDE.equals(action)) {
       bindCoreAction(actionAMSuicideArgs);
 
+    } else if (SliderActions.ACTION_DEPENDENCY.equals(action)) {
+      bindCoreAction(actionDependencyArgs);
+
     } else if (SliderActions.ACTION_DESTROY.equals(action)) {
       bindCoreAction(actionDestroyArgs);
 
@@ -241,6 +271,15 @@ public class ClientArgs extends CommonArgs {
     } else if (SliderActions.ACTION_INSTALL_PACKAGE.equals(action)) {
       bindCoreAction(actionInstallPackageArgs);
 
+    } else if (SliderActions.ACTION_KEYTAB.equals(action)) {
+      bindCoreAction(actionKeytabArgs);
+
+    } else if (SliderActions.ACTION_PACKAGE.equals(action)) {
+      bindCoreAction(actionPackageArgs);
+
+    } else if (SliderActions.ACTION_CLIENT.equals(action)) {
+      bindCoreAction(actionClientArgs);
+
     } else if (SliderActions.ACTION_INSTALL_KEYTAB.equals(action)) {
       bindCoreAction(actionInstallKeytabArgs);
 
@@ -253,6 +292,9 @@ public class ClientArgs extends CommonArgs {
     } else if (SliderActions.ACTION_LOOKUP.equals(action)) {
       bindCoreAction(actionLookupArgs);
 
+    } else if (SliderActions.ACTION_NODES.equals(action)) {
+      bindCoreAction(actionNodesArgs);
+
     } else if (SliderActions.ACTION_REGISTRY.equals(action)) {
       bindCoreAction(actionRegistryArgs);
 
@@ -264,6 +306,9 @@ public class ClientArgs extends CommonArgs {
 
     } else if (SliderActions.ACTION_UPDATE.equals(action)) {
       bindCoreAction(actionUpdateArgs);
+
+    } else if (SliderActions.ACTION_UPGRADE.equals(action)) {
+      bindCoreAction(actionUpgradeArgs);
 
     } else if (SliderActions.ACTION_VERSION.equals(action)) {
       bindCoreAction(actionVersionArgs);

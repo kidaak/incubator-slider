@@ -30,6 +30,7 @@ import org.apache.slider.server.appmaster.model.mock.BaseMockAppStateTest
 import org.apache.slider.server.appmaster.model.mock.MockRoles
 import org.apache.slider.server.appmaster.model.mock.MockYarnEngine
 import org.apache.slider.server.appmaster.state.AppState
+import org.apache.slider.server.appmaster.state.ContainerOutcome
 import org.apache.slider.server.appmaster.state.NodeEntry
 import org.apache.slider.server.appmaster.state.NodeInstance
 import org.apache.slider.server.appmaster.state.RoleHistory
@@ -57,7 +58,7 @@ class TestMockAppStateContainerFailure extends BaseMockAppStateTest
    */
   @Override
   MockYarnEngine createYarnEngine() {
-    return new MockYarnEngine(8000, 4)
+    return new MockYarnEngine(4, 8000)
   }
 
   @Override
@@ -87,14 +88,14 @@ class TestMockAppStateContainerFailure extends BaseMockAppStateTest
     assert appState.isShortLived(instance)
     AppState.NodeCompletionResult result = appState.onCompletedNode(containerStatus(cid, 1))
     assert result.roleInstance != null
-    assert result.containerFailed 
+    assert result.containerFailed
     RoleStatus status = role0Status
     assert status.failed == 1
     assert status.startFailed == 1
 
     //view the world
     appState.getRoleHistory().dump();
-    List<NodeInstance> queue = appState.roleHistory.cloneAvailableList(0)
+    List<NodeInstance> queue = appState.roleHistory.cloneRecentNodeList(0)
     assert queue.size() == 0
 
   }
@@ -122,7 +123,7 @@ class TestMockAppStateContainerFailure extends BaseMockAppStateTest
 
     //view the world
     appState.getRoleHistory().dump();
-    List<NodeInstance> queue = appState.roleHistory.cloneAvailableList(0)
+    List<NodeInstance> queue = appState.roleHistory.cloneRecentNodeList(0)
     assert queue.size() == 1
 
   }
@@ -141,13 +142,13 @@ class TestMockAppStateContainerFailure extends BaseMockAppStateTest
     ContainerId cid = ids[0]
     appState.onNodeManagerContainerStartFailed(cid, new SliderException("oops"))
     RoleStatus status = role0Status
-    assert status.failed == 1
-    assert status.startFailed == 1
+    assert 1 == status.failed
+    assert 1 == status.startFailed
 
     
     RoleHistory history = appState.roleHistory
     history.dump();
-    List<NodeInstance> queue = history.cloneAvailableList(0)
+    List<NodeInstance> queue = history.cloneRecentNodeList(0)
     assert queue.size() == 0
 
     NodeInstance ni = history.getOrCreateNodeInstance(instance.container)
@@ -182,7 +183,7 @@ class TestMockAppStateContainerFailure extends BaseMockAppStateTest
 
 
   @Test
-  public void testFailureWindow() throws Throwable {
+  public void testRoleStatusFailureWindow() throws Throwable {
 
     ResetFailureWindow resetter = new ResetFailureWindow();
 
@@ -208,5 +209,128 @@ class TestMockAppStateContainerFailure extends BaseMockAppStateTest
         assert result.containerFailed
       }
   }
+
+  @Test
+  public void testRoleStatusFailed() throws Throwable {
+    def status = role0Status
+    // limits exceeded
+    status.noteFailed(false, "text",ContainerOutcome.Failed)
+    assert 1 == status.failed
+    assert 1L == status.failedRecently
+    assert 0L == status.limitsExceeded
+    assert 0L == status.preempted
+    assert 0L == status.nodeFailed
+
+    ResetFailureWindow resetter = new ResetFailureWindow();
+    resetter.execute(null, null, appState)
+    assert 1 == status.failed
+    assert 0L == status.failedRecently
+  }
+
+  @Test
+  public void testRoleStatusFailedLimitsExceeded() throws Throwable {
+    def status = role0Status
+    // limits exceeded
+    status.noteFailed(false, "text",ContainerOutcome.Failed_limits_exceeded)
+    assert 1 == status.failed
+    assert 1L == status.failedRecently
+    assert 1L == status.limitsExceeded
+    assert 0L == status.preempted
+    assert 0L == status.nodeFailed
+
+    ResetFailureWindow resetter = new ResetFailureWindow();
+    resetter.execute(null, null, appState)
+    assert 1 == status.failed
+    assert 0L == status.failedRecently
+    assert 1L == status.limitsExceeded
+  }
+
+
+  @Test
+  public void testRoleStatusFailedPrempted() throws Throwable {
+    def status = role0Status
+    // limits exceeded
+    status.noteFailed(false, "text", ContainerOutcome.Preempted)
+    assert 0 == status.failed
+    assert 1L == status.preempted
+    assert 0L == status.failedRecently
+    assert 0L == status.nodeFailed
+
+    ResetFailureWindow resetter = new ResetFailureWindow();
+    resetter.execute(null, null, appState)
+    assert 1L == status.preempted
+  }
+
+
+  @Test
+  public void testRoleStatusFailedNode() throws Throwable {
+    def status = role0Status
+    // limits exceeded
+    status.noteFailed(false, "text", ContainerOutcome.Node_failure)
+    assert 1 == status.failed
+    assert 0L == status.failedRecently
+    assert 0L == status.limitsExceeded
+    assert 0L == status.preempted
+    assert 1L == status.nodeFailed
+  }
+
+  @Test
+  public void testNodeEntryCompleted() throws Throwable {
+    NodeEntry nodeEntry = new NodeEntry(1)
+    nodeEntry.containerCompleted(true, ContainerOutcome.Completed);
+    assert 0 == nodeEntry.failed
+    assert 0 == nodeEntry.failedRecently
+    assert 0 == nodeEntry.startFailed
+    assert 0 == nodeEntry.preempted
+    assert 0 == nodeEntry.active
+    assert nodeEntry.available
+  }
+
+  @Test
+  public void testNodeEntryFailed() throws Throwable {
+    NodeEntry nodeEntry = new NodeEntry(1)
+    nodeEntry.containerCompleted(false, ContainerOutcome.Failed);
+    assert 1 == nodeEntry.failed
+    assert 1 == nodeEntry.failedRecently
+    assert 0 == nodeEntry.startFailed
+    assert 0 == nodeEntry.preempted
+    assert 0 == nodeEntry.active
+    assert nodeEntry.available
+    nodeEntry.resetFailedRecently()
+    assert 1 == nodeEntry.failed
+    assert 0 == nodeEntry.failedRecently
+  }
+
+  @Test
+  public void testNodeEntryLimitsExceeded() throws Throwable {
+    NodeEntry nodeEntry = new NodeEntry(1)
+    nodeEntry.containerCompleted(false, ContainerOutcome.Failed_limits_exceeded);
+    assert 0 == nodeEntry.failed
+    assert 0 == nodeEntry.failedRecently
+    assert 0 == nodeEntry.startFailed
+    assert 0 == nodeEntry.preempted
+  }
+
+  @Test
+  public void testNodeEntryPreempted() throws Throwable {
+    NodeEntry nodeEntry = new NodeEntry(1)
+    nodeEntry.containerCompleted(false, ContainerOutcome.Preempted);
+    assert 0 == nodeEntry.failed
+    assert 0 == nodeEntry.failedRecently
+    assert 0 == nodeEntry.startFailed
+    assert 1 == nodeEntry.preempted
+  }
+
+  @Test
+  public void testNodeEntryNodeFailure() throws Throwable {
+    NodeEntry nodeEntry = new NodeEntry(1)
+    nodeEntry.containerCompleted(false, ContainerOutcome.Node_failure);
+    assert 1 == nodeEntry.failed
+    assert 1 == nodeEntry.failedRecently
+    assert 0 == nodeEntry.startFailed
+    assert 0 == nodeEntry.preempted
+  }
+
+
 
 }

@@ -25,20 +25,7 @@ public interface AgentKeys {
 
   String PROVIDER_AGENT = "agent";
   String ROLE_NODE = "echo";
-  /**
-   * {@value}
-   */
-  String REGION_SERVER = "regionserver";
-  /**
-   * What is the command for hbase to print a version: {@value}
-   */
-  String COMMAND_VERSION = "version";
-  String ACTION_START = "start";
-  String ACTION_STOP = "stop";
-  /**
-   * Config directory : {@value}
-   */
-  String ARG_CONFIG = "--config";
+
   /**
    * Template stored in the slider classpath -to use if there is
    * no site-specific template
@@ -80,11 +67,15 @@ public interface AgentKeys {
   String AGENT_MAIN_SCRIPT = "agent/main.py";
 
   String APP_DEF = "application.def";
+  String ADDON_PREFIX = "application.addon.";
+  String ADDONS = "application.addons";
   String AGENT_VERSION = "agent.version";
   String AGENT_CONF = "agent.conf";
+  String ADDON_FOR_ALL_COMPONENTS = "ALL";
 
   String AGENT_INSTALL_DIR = "infra/agent";
   String APP_DEFINITION_DIR = "app/definition";
+  String ADDON_DEFINITION_DIR = "addon/definition";
   String AGENT_CONFIG_FILE = "infra/conf/agent.ini";
   String AGENT_VERSION_FILE = "infra/version";
 
@@ -98,8 +89,10 @@ public interface AgentKeys {
   String AGENT_INSTANCE_DEBUG_DATA = "agent.instance.debug.data";
   String AGENT_OUT_FILE = "slider-agent.out";
   String KEY_AGENT_TWO_WAY_SSL_ENABLED = "ssl.server.client.auth";
-  String CERT_FILE_LOCALIZATION_PATH = "certs/ca.crt";
+  String INFRA_RUN_SECURITY_DIR = "infra/run/security/";
+  String CERT_FILE_LOCALIZATION_PATH = INFRA_RUN_SECURITY_DIR + "ca.crt";
   String KEY_CONTAINER_LAUNCH_DELAY = "container.launch.delay.sec";
+  String TEST_RELAX_VERIFICATION = "test.relax.validation";
 }
 
 

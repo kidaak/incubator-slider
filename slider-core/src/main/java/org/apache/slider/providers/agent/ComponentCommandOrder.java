@@ -49,13 +49,13 @@ public class ComponentCommandOrder {
         if (requiredStates.size() > 0) {
           Map<String, List<ComponentState>> compDep = dependencies.get(componentCmd.command);
           if (compDep == null) {
-            compDep = new HashMap<String, List<ComponentState>>();
+            compDep = new HashMap<>();
             dependencies.put(componentCmd.command, compDep);
           }
 
           List<ComponentState> requirements = compDep.get(componentCmd.componentName);
           if (requirements == null) {
-            requirements = new ArrayList<ComponentState>();
+            requirements = new ArrayList<>();
             compDep.put(componentCmd.componentName, requirements);
           }
 
@@ -120,6 +120,8 @@ public class ComponentCommandOrder {
     return new ComponentState(compStr, state);
   }
 
+  // dependency is still on component level, but not package level
+  // so use component name to check dependency, not component-package
   public boolean canExecute(String component, Command command, Collection<ComponentInstanceState> currentStates) {
     boolean canExecute = true;
     if (dependencies.containsKey(command) && dependencies.get(command).containsKey(component)) {

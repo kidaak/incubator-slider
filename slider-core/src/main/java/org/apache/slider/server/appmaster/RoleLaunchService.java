@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.slider.common.SliderKeys;
 import org.apache.slider.common.tools.SliderFileSystem;
 import org.apache.slider.core.conf.AggregateConf;
 import org.apache.slider.core.conf.MapOperations;
@@ -32,6 +33,7 @@ import org.apache.slider.providers.ProviderService;
 import org.apache.slider.providers.agent.AgentKeys;
 import org.apache.slider.server.appmaster.actions.ActionStartContainer;
 import org.apache.slider.server.appmaster.actions.QueueAccess;
+import org.apache.slider.server.appmaster.state.ContainerAssignment;
 import org.apache.slider.server.appmaster.state.RoleInstance;
 import org.apache.slider.server.appmaster.state.RoleStatus;
 import org.apache.slider.server.services.workflow.WorkflowExecutorService;
@@ -121,17 +123,16 @@ public class RoleLaunchService
    * @param role role
    * @param clusterSpec cluster spec to use for template
    */
-  public void launchRole(Container container,
-                         RoleStatus role,
+  public void launchRole(ContainerAssignment assignment,
                          AggregateConf clusterSpec) {
+    RoleStatus role = assignment.role;
     String roleName = role.getName();
     // prelaunch safety check
     Preconditions.checkArgument(provider.isSupportedRole(roleName));
     RoleLaunchService.RoleLauncher launcher =
-      new RoleLaunchService.RoleLauncher(container,
-         role.getProviderRole(),
-         clusterSpec,
-         clusterSpec.getResourceOperations() .getOrAddComponent(roleName),
+      new RoleLaunchService.RoleLauncher(assignment,
+          clusterSpec,
+         clusterSpec.getResourceOperations().getOrAddComponent(roleName),
          clusterSpec.getAppConfOperations().getOrAddComponent(roleName));
     execute(launcher);
   }
@@ -141,27 +142,30 @@ public class RoleLaunchService
    */
   private class RoleLauncher implements Runnable {
 
+    private final ContainerAssignment assignment;
     // Allocated container
     public final Container container;
-    public  final String containerRole;
+    public final String containerRole;
     private final MapOperations resourceComponent;
     private final MapOperations appComponent;
     private final AggregateConf instanceDefinition;
     public final ProviderRole role;
     private Exception raisedException;
 
-    public RoleLauncher(Container container,
-                        ProviderRole role,
-                        AggregateConf instanceDefinition,
-                        MapOperations resourceComponent,
-                        MapOperations appComponent) {
-      assert container != null;
-      assert role != null;
+    public RoleLauncher(ContainerAssignment assignment,
+        AggregateConf instanceDefinition,
+        MapOperations resourceComponent,
+        MapOperations appComponent) {
+      this.assignment = assignment;
+      this.container = assignment.container;
+      RoleStatus roleStatus = assignment.role;
+
       assert resourceComponent != null;
       assert appComponent != null;
-      this.container = container;
-      this.containerRole = role.name;
-      this.role = role;
+      ProviderRole providerRole = roleStatus.getProviderRole();
+      assert providerRole != null;
+      this.containerRole = providerRole.name;
+      this.role = providerRole;
       this.resourceComponent = resourceComponent;
       this.appComponent = appComponent;
       this.instanceDefinition = instanceDefinition;
@@ -214,6 +218,8 @@ public class RoleLaunchService
         instance.command = commandsAsString;
         instance.role = containerRole;
         instance.roleId = role.id;
+        instance.appVersion = instanceDefinition.getAppConfOperations()
+            .getGlobalOptions().get(SliderKeys.APP_VERSION);
         instance.environment = envDescription;
         int delay = appComponent.getOptionInt(
             AgentKeys.KEY_CONTAINER_LAUNCH_DELAY, 0);
@@ -228,8 +234,7 @@ public class RoleLaunchService
         }
         log.info("Container launch delay for {} set to {} seconds",
                  role.name, delay);
-        actionQueue.schedule(new ActionStartContainer("starting "
-                                                      + containerRole,
+        actionQueue.schedule(new ActionStartContainer("starting " + containerRole,
                                                       container,
                                                       containerLauncher.completeContainerLaunch(),
                                                       instance,
@@ -237,7 +242,7 @@ public class RoleLaunchService
                                                       TimeUnit.SECONDS));
       } catch (Exception e) {
         log.error("Exception thrown while trying to start {}: {}",
-            containerRole, e);
+            containerRole, e, e);
         raisedException = e;
       }
     }

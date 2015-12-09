@@ -25,9 +25,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataOutputBuffer;
-import org.apache.hadoop.io.Text;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
 import org.apache.hadoop.yarn.api.records.LocalResource;
 import org.apache.hadoop.yarn.api.records.LogAggregationContext;
@@ -42,6 +42,9 @@ import org.apache.slider.core.conf.MapOperations;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
+import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -56,6 +59,7 @@ public abstract class AbstractLauncher extends Configured {
   private static final Logger log =
     LoggerFactory.getLogger(AbstractLauncher.class);
   public static final String CLASSPATH = "CLASSPATH";
+  public static final String MAPREDUCE_JOB_CREDENTIALS_BINARY = "mapreduce.job.credentials.binary";
   /**
    * Filesystem to use for the launch
    */
@@ -63,15 +67,13 @@ public abstract class AbstractLauncher extends Configured {
   /**
    * Env vars; set up at final launch stage
    */
-  protected final Map<String, String> envVars = new HashMap<String, String>();
+  protected final Map<String, String> envVars = new HashMap<>();
   protected final MapOperations env = new MapOperations("env", envVars);
   protected final ContainerLaunchContext containerLaunchContext =
     Records.newRecord(ContainerLaunchContext.class);
-  protected final List<String> commands = new ArrayList<String>(20);
-  protected final Map<String, LocalResource> localResources =
-    new HashMap<String, LocalResource>();
-  private final Map<String, ByteBuffer> serviceData =
-    new HashMap<String, ByteBuffer>();
+  protected final List<String> commands = new ArrayList<>(20);
+  protected final Map<String, LocalResource> localResources = new HashMap<>();
+  private final Map<String, ByteBuffer> serviceData = new HashMap<>();
   // security
   protected final Credentials credentials = new Credentials();
   protected LogAggregationContext logAggregationContext;
@@ -83,7 +85,7 @@ public abstract class AbstractLauncher extends Configured {
     this.coreFileSystem = fs;
   }
 
-  public AbstractLauncher(CoreFileSystem fs) {
+  protected AbstractLauncher(CoreFileSystem fs) {
     this.coreFileSystem = fs;
   }
 
@@ -210,7 +212,18 @@ public abstract class AbstractLauncher extends Configured {
     //tokens
     log.debug("{} tokens", credentials.numberOfTokens());
     DataOutputBuffer dob = new DataOutputBuffer();
-    credentials.writeTokenStorageToStream(dob);
+    String tokenFileName =
+        this.getConf().get(MAPREDUCE_JOB_CREDENTIALS_BINARY);
+    if (tokenFileName != null) {
+      // use delegation tokens, i.e. from Oozie
+      Credentials creds =
+          Credentials.readTokenStorageFile(new File(tokenFileName), getConf());
+      creds.writeTokenStorageToStream(dob);
+    } else {
+      // normal auth
+      credentials.writeTokenStorageToStream(dob);
+    }
+
     ByteBuffer tokenBuffer = ByteBuffer.wrap(dob.getData(), 0, dob.getLength());
     containerLaunchContext.setTokens(tokenBuffer);
 
@@ -267,13 +280,37 @@ public abstract class AbstractLauncher extends Configured {
     }
   }
 
+  /**
+   * Extract the value for option
+   * yarn.resourcemanager.am.retry-count-window-ms
+   * and set it on the ApplicationSubmissionContext. Use the default value
+   * if option is not set.
+   *
+   * @param submissionContext
+   * @param map
+   */
+  public void extractAmRetryCount(ApplicationSubmissionContext submissionContext,
+                                  Map<String, String> map) {
+
+    if (map != null) {
+      MapOperations options = new MapOperations("", map);
+      long amRetryCountWindow = options.getOptionLong(ResourceKeys
+          .YARN_RESOURCEMANAGER_AM_RETRY_COUNT_WINDOW_MS,
+          ResourceKeys.DEFAULT_AM_RETRY_COUNT_WINDOW_MS);
+      log.info("Setting {} to {}",
+          ResourceKeys.YARN_RESOURCEMANAGER_AM_RETRY_COUNT_WINDOW_MS,
+          amRetryCountWindow);
+      submissionContext.setAttemptFailuresValidityInterval(amRetryCountWindow);
+    }
+  }
+
   public void extractLogAggregationContext(Map<String, String> map) {
     if (map != null) {
       String logPatternSepStr = "\\|";
       String logPatternJoinStr = "|";
       MapOperations options = new MapOperations("", map);
 
-      List<String> logIncludePatterns = new ArrayList<String>();
+      List<String> logIncludePatterns = new ArrayList<>();
       String includePatternExpression = options.getOption(
           ResourceKeys.YARN_LOG_INCLUDE_PATTERNS, "").trim();
       if (!includePatternExpression.isEmpty()) {
@@ -290,7 +327,7 @@ public abstract class AbstractLauncher extends Configured {
           logPatternJoinStr);
       log.info("Log include patterns: {}", logIncludePattern);
 
-      List<String> logExcludePatterns = new ArrayList<String>();
+      List<String> logExcludePatterns = new ArrayList<>();
       String excludePatternExpression = options.getOption(
           ResourceKeys.YARN_LOG_EXCLUDE_PATTERNS, "").trim();
       if (!excludePatternExpression.isEmpty()) {
@@ -307,8 +344,54 @@ public abstract class AbstractLauncher extends Configured {
           logPatternJoinStr);
       log.info("Log exclude patterns: {}", logExcludePattern);
 
-      logAggregationContext = LogAggregationContext.newInstance(
-          logIncludePattern, logExcludePattern);
+      // SLIDER-810/YARN-3154 - hadoop 2.7.0 onwards a new instance method has
+      // been added for log aggregation for LRS. Existing newInstance method's
+      // behavior has changed and is used for log aggregation only after the
+      // application has finished. This forces Slider users to move to hadoop
+      // 2.7.0+ just for log aggregation, which is not very desirable. So we
+      // decided to use reflection here to find out if the new 2.7.0 newInstance
+      // method is available. If yes, then we use it, so log aggregation will
+      // work in hadoop 2.7.0+ env. If no, then we fallback to the pre-2.7.0
+      // newInstance method, which means log aggregation will work as expected
+      // in hadoop 2.6 as well.
+      // TODO: At some point, say 2-3 Slider releases down, when most users are
+      // running hadoop 2.7.0, we should get rid of the reflection code here.
+      try {
+        Method logAggregationContextMethod = LogAggregationContext.class
+            .getMethod("newInstance", String.class, String.class, String.class,
+                String.class);
+        // Need to set include/exclude patterns appropriately since by default
+        // rolled log aggregation is not done for any files, so defaults are
+        // - include pattern set to ""
+        // - exclude pattern set to "*"
+        // For Slider we want all logs to be uploaded if include/exclude
+        // patterns are left empty by the app owner in resources file
+        if (StringUtils.isEmpty(logIncludePattern)
+            && StringUtils.isEmpty(logExcludePattern)) {
+          logIncludePattern = ".*";
+          logExcludePattern = "";
+        } else if (StringUtils.isEmpty(logIncludePattern)
+            && StringUtils.isNotEmpty(logExcludePattern)) {
+          logIncludePattern = ".*";
+        } else if (StringUtils.isNotEmpty(logIncludePattern)
+            && StringUtils.isEmpty(logExcludePattern)) {
+          logExcludePattern = "";
+        }
+        log.debug("LogAggregationContext newInstance method for rolled logs "
+            + "include/exclude patterns is available");
+        log.info("Modified log include patterns: {}", logIncludePattern);
+        log.info("Modified log exclude patterns: {}", logExcludePattern);
+        logAggregationContext = (LogAggregationContext) logAggregationContextMethod
+            .invoke(null, null, null, logIncludePattern, logExcludePattern);
+      } catch (NoSuchMethodException | SecurityException
+          | IllegalAccessException | IllegalArgumentException
+          | InvocationTargetException e) {
+        log.debug("LogAggregationContext newInstance method for rolled logs "
+            + "include/exclude patterns is not available - fallback to old one");
+        log.debug(e.toString());
+        logAggregationContext = LogAggregationContext.newInstance(
+            logIncludePattern, logExcludePattern);
+      }
     }
   }
 
@@ -365,7 +448,7 @@ public abstract class AbstractLauncher extends Configured {
   }
 
   /**
-   * Suubmit an entire directory
+   * Submit an entire directory
    * @param srcDir src path in filesystem
    * @param destRelativeDir relative path under destination local dir
    * @throws IOException IO problems
@@ -382,8 +465,8 @@ public abstract class AbstractLauncher extends Configured {
 
   /**
    * Return the label expression and if not set null
-   * @param map
-   * @return
+   * @param map map to look up
+   * @return extracted label or null
    */
   public String extractLabelExpression(Map<String, String> map) {
     if (map != null) {

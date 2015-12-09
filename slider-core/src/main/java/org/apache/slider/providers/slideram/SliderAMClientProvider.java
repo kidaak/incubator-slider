@@ -88,7 +88,9 @@ public class SliderAMClientProvider extends AbstractClientProvider
 
   public static final ProviderRole APPMASTER =
       new ProviderRole(COMPONENT_AM, KEY_AM,
-          PlacementPolicy.EXCLUDE_FROM_FLEXING);
+          PlacementPolicy.EXCLUDE_FROM_FLEXING,
+          ResourceKeys.DEFAULT_NODE_FAILURE_THRESHOLD, 
+          0, "");
 
   /**
    * Initialize role list
@@ -172,9 +174,7 @@ public class SliderAMClientProvider extends AbstractClientProvider
       Path tempPath, boolean miniClusterTestRun)
     throws IOException, SliderException {
 
-    Map<String, LocalResource> providerResources =
-        new HashMap<String, LocalResource>();
-
+    Map<String, LocalResource> providerResources = new HashMap<>();
 
     ProviderUtils.addProviderJar(providerResources,
         this,
@@ -186,16 +186,23 @@ public class SliderAMClientProvider extends AbstractClientProvider
 
     String libDirProp =
         System.getProperty(SliderKeys.PROPERTY_LIB_DIR);
-      log.info("Loading all dependencies for AM.");
+    log.info("Loading all dependencies for AM.");
+    // If slider.tar.gz is available in hdfs use it, else upload all jars
+    Path dependencyLibTarGzip = fileSystem.getDependencyTarGzip();
+    if (fileSystem.isFile(dependencyLibTarGzip)) {
+      SliderUtils.putAmTarGzipAndUpdate(providerResources, fileSystem);
+    } else {
       ProviderUtils.addAllDependencyJars(providerResources,
                                          fileSystem,
                                          tempPath,
                                          libdir,
                                          libDirProp);
+    }
     addKeytabResourceIfNecessary(fileSystem,
-                                 launcher,
                                  instanceDescription,
                                  providerResources);
+
+    launcher.addLocalResources(providerResources);
 
     //also pick up all env variables from a map
     launcher.copyEnvVars(
@@ -208,16 +215,15 @@ public class SliderAMClientProvider extends AbstractClientProvider
    * authentication, add this keytab as a local resource for the AM launch.
    *
    * @param fileSystem
-   * @param launcher
    * @param instanceDescription
    * @param providerResources
    * @throws IOException
+   * @throws BadConfigException if there's no keytab and it is explicitly required.
    */
   protected void addKeytabResourceIfNecessary(SliderFileSystem fileSystem,
-                                              AbstractLauncher launcher,
                                               AggregateConf instanceDescription,
                                               Map<String, LocalResource> providerResources)
-      throws IOException {
+    throws IOException, BadConfigException {
     if (UserGroupInformation.isSecurityEnabled()) {
       String keytabPathOnHost = instanceDescription.getAppConfOperations()
           .getComponent(SliderKeys.COMPONENT_AM).get(
@@ -231,14 +237,26 @@ public class SliderAMClientProvider extends AbstractClientProvider
                 SliderXmlConfKeys.KEY_HDFS_KEYTAB_DIR);
         Path keytabPath = fileSystem.buildKeytabPath(keytabDir, amKeytabName,
                                                      instanceDescription.getName());
-        LocalResource keytabRes = fileSystem.createAmResource(keytabPath,
-                                                LocalResourceType.FILE);
+        if (fileSystem.getFileSystem().exists(keytabPath)) {
+          LocalResource keytabRes = fileSystem.createAmResource(keytabPath,
+                                                  LocalResourceType.FILE);
 
-         providerResources.put(SliderKeys.KEYTAB_DIR + "/" +
-                               amKeytabName, keytabRes);
+          providerResources.put(SliderKeys.KEYTAB_DIR + "/" +
+                                 amKeytabName, keytabRes);
+        } else {
+          log.warn("No keytab file was found at {}.", keytabPath);
+          if (getConf().getBoolean(KEY_AM_LOGIN_KEYTAB_REQUIRED, false)) {
+            throw new BadConfigException("No keytab file was found at %s.", keytabPath);
+
+          } else {
+            log.warn("The AM will be "
+              + "started without a kerberos authenticated identity. "
+              + "The application is therefore not guaranteed to remain "
+              + "operational beyond 24 hours.");
+          }
+        }
       }
     }
-    launcher.addLocalResources(providerResources);
   }
 
   /**

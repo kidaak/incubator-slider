@@ -22,6 +22,7 @@ import groovy.util.logging.Slf4j
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api.records.YarnApplicationState
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.slider.common.SliderExitCodes
 import org.apache.slider.common.params.Arguments
 import org.apache.slider.common.params.SliderActions
@@ -150,6 +151,32 @@ implements FuntestProperties, Arguments, SliderExitCodes, SliderActions {
       }
     }
   }
+  
+  protected static void verifyFileExist(String filePath){
+    try{
+      Path pt = new Path(filePath);
+      def uploader = new FileUploader(SLIDER_CONFIG,
+        UserGroupInformation.currentUser)
+      FileSystem fs = uploader.getFileSystem();
+      assert fs.exists(pt);
+    }catch(IOException e){
+      log.error("IOException during verifying file exist " + e.toString());
+    }
+  }
+  
+  protected static void cleanupHdfsFile(String filePath){
+    try{
+      Path pt = new Path(filePath);
+      def uploader = new FileUploader(SLIDER_CONFIG,
+        UserGroupInformation.currentUser)
+      FileSystem fs = uploader.getFileSystem();
+      if( fs.exists(pt)){
+        fs.delete(pt, false);
+      }      
+    }catch(IOException e){
+      log.error("IOException during deleting file: " + e.toString());
+    }
+  }
 
   protected void cleanup(String applicationName) throws Throwable {
     if (setup_failed) {
@@ -159,14 +186,17 @@ implements FuntestProperties, Arguments, SliderExitCodes, SliderActions {
 
     describe "Teardown app instance " + applicationName
     // forced freeze with wait
+    SliderShell shell
+    shell = stop(applicationName)
     teardown(applicationName)
-    SliderShell shell = slider([
+
+    shell = slider([
         ACTION_DESTROY,
-        applicationName])
+        applicationName,
+        ARG_FORCE])
 
     if (shell.ret != 0 && shell.ret != EXIT_UNKNOWN_INSTANCE) {
-      logShell(shell)
-      assert fail("Old cluster either should not exist or should get destroyed; destroy exit code = ${shell.ret}")
+      assertExitCode(shell, 0)
     }
   }
 

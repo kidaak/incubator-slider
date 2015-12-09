@@ -67,6 +67,11 @@ public class SliderAMProviderService extends AbstractProviderService implements
   }
 
   @Override
+  public String getHumanName() {
+    return "Slider Application";
+  }
+  
+  @Override
   public Configuration loadProviderConfigurationInformation(File confDir) throws
       BadCommandArgumentsException,
       IOException {
@@ -83,12 +88,11 @@ public class SliderAMProviderService extends AbstractProviderService implements
       MapOperations resourceComponent,
       MapOperations appComponent,
       Path containerTmpDirPath) throws IOException, SliderException {
-    
   }
 
   @Override
   public List<ProviderRole> getRoles() {
-    return new ArrayList<ProviderRole>(0);
+    return new ArrayList<>(0);
   }
 
   @Override
@@ -152,6 +156,11 @@ public class SliderAMProviderService extends AbstractProviderService implements
       serviceRecord.addExternalEndpoint(
           RegistryTypeUtils.webEndpoint(
               CustomRegistryConstants.WEB_UI, amWebURI.toURI()));
+      
+      serviceRecord.addExternalEndpoint(
+          RegistryTypeUtils.webEndpoint(
+              CustomRegistryConstants.AM_REST_BASE, amWebURI.toURI()));
+      
       serviceRecord.addExternalEndpoint(
           RegistryTypeUtils.restEndpoint(
               CustomRegistryConstants.MANAGEMENT_REST_API,

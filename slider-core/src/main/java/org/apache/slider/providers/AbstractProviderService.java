@@ -39,6 +39,7 @@ import org.apache.slider.core.exceptions.BadCommandArgumentsException;
 import org.apache.slider.core.exceptions.SliderException;
 import org.apache.slider.core.main.ExitCodeProvider;
 import org.apache.slider.server.appmaster.actions.QueueAccess;
+import org.apache.slider.server.appmaster.operations.AbstractRMOperation;
 import org.apache.slider.server.appmaster.state.ContainerReleaseSelector;
 import org.apache.slider.server.appmaster.state.MostRecentContainerReleaseSelector;
 import org.apache.slider.server.appmaster.state.StateAccessForProviders;
@@ -58,6 +59,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -79,7 +81,7 @@ public abstract class AbstractProviderService
   protected YarnRegistryViewForProviders yarnRegistry;
   protected QueueAccess queueAccess;
 
-  public AbstractProviderService(String name) {
+  protected AbstractProviderService(String name) {
     super(name);
     setStopIfNoChildServicesAtStartup(false);
   }
@@ -101,6 +103,10 @@ public abstract class AbstractProviderService
     this.amState = amState;
   }
 
+  @Override
+  public String getHumanName() {
+    return getName().toLowerCase(Locale.ENGLISH);
+  }
   
   @Override
   public void bind(StateAccessForProviders stateAccessor,
@@ -175,9 +181,8 @@ public abstract class AbstractProviderService
   @Override
   public void validateApplicationConfiguration(AggregateConf instance,
                                                File confDir,
-                                               boolean secure) throws
-      IOException,
-      SliderException {
+                                               boolean secure)
+      throws IOException, SliderException {
 
   }
 
@@ -338,12 +343,6 @@ public abstract class AbstractProviderService
 
     return details;
   }
-  
-  protected String getInfoAvoidingNull(ClusterDescription clusterDesc, String key) {
-    String value = clusterDesc.getInfo(key);
-
-    return null == value ? "N/A" : value;
-  }
 
   @Override
   public void buildEndpointDetails(Map<String, String> details) {
@@ -358,10 +357,8 @@ public abstract class AbstractProviderService
           if (!urls.isEmpty()) {
             details.put(endpoint.api, urls.get(0).toString());
           }
-        } catch (InvalidRecordException ignored) {
+        } catch (InvalidRecordException  | MalformedURLException ignored) {
           // Ignored
-        } catch (MalformedURLException ignored) {
-          // ignored
         }
 
       }
@@ -400,12 +397,23 @@ public abstract class AbstractProviderService
   }
 
   @Override
+  public void cancelSingleRequest(AMRMClient.ContainerRequest request) {
+    // no-op
+  }
+
+  @Override
   public int cancelContainerRequests(Priority priority1,
       Priority priority2,
       int count) {
     return 0;
   }
 
+  @Override
+  public void execute(List<AbstractRMOperation> operations) {
+    for (AbstractRMOperation operation : operations) {
+      operation.execute(this);
+    }
+  }
   /**
    * No-op implementation of this method.
    */

@@ -158,6 +158,7 @@ class TestStandaloneYarnRegistryAM extends AgentMiniClusterTestBase {
     assert serviceRecords.size() == 1
 
     def serviceRecord = serviceRecords[0]
+    describe "service record"
     log.info(serviceRecord.toString())
 
     assert serviceRecord[YarnRegistryAttributes.YARN_ID] != null
@@ -356,7 +357,7 @@ class TestStandaloneYarnRegistryAM extends AgentMiniClusterTestBase {
     describe "Registry Retrieval Class"
     // retrieval
 
-    RegistryRetriever retriever = new RegistryRetriever(serviceRecord)
+    RegistryRetriever retriever = new RegistryRetriever(launcher.configuration, serviceRecord)
     log.info retriever.toString()
     
     assert retriever.hasConfigurations(true)

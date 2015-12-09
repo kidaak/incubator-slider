@@ -26,6 +26,8 @@ import status_params
 config = Script.get_config()
 
 hbase_root = config['configurations']['global']['app_root']
+app_version = config['configurations']['global']['app_version']
+app_name = config['clusterName']
 conf_dir = format("{hbase_root}/conf")
 daemon_script = format("{hbase_root}/bin/hbase-daemon.sh")
 
@@ -41,6 +43,8 @@ metric_prop_file_name = "hadoop-metrics2-hbase.properties"
 java64_home = config['hostLevelParams']['java_home']
 
 log_dir = config['configurations']['global']['app_log_dir']
+#configuration for HBASE_OPTS
+hbase_opts = default('/configurations/hbase-env/hbase_opts', '')
 master_heapsize = config['configurations']['hbase-env']['hbase_master_heapsize']
 
 regionserver_heapsize = config['configurations']['hbase-env']['hbase_regionserver_heapsize']
@@ -57,26 +61,41 @@ client_jaas_config_file = default('hbase_client_jaas_config_file', format("{conf
 master_jaas_config_file = default('hbase_master_jaas_config_file', format("{conf_dir}/hbase_master_jaas.conf"))
 regionserver_jaas_config_file = default('hbase_regionserver_jaas_config_file', format("{conf_dir}/hbase_regionserver_jaas.conf"))
 
-ganglia_server_host = default('/configurations/global/ganglia_server_host', '')
-ganglia_server_port = default('/configurations/global/ganglia_server_port', '8663')
+metric_collector_host = default('/configurations/global/metric_collector_host', '')
+metric_collector_port = default('/configurations/global/metric_collector_port', '')
+metric_collector_lib = default('/configurations/global/metric_collector_lib', '')
+has_metric_collector = 1
+if not metric_collector_lib:
+  has_metric_collector = 0
 
 rest_port = config['configurations']['global']['hbase_rest_port']
-thrift_port = config['configurations']['global']['hbase_thrift_port']
-thrift2_port = config['configurations']['global']['hbase_thrift2_port']
+rest_infoport = default('/configurations/global/hbase_rest_infoport', '')
+rest_readonly = default('/configurations/global/hbase_rest_readonly', '')
+
+thrift_port = default('/configurations/global/hbase_thrift_port', '')
+thrift_keepalive_sec = default('/configurations/global/hbase_thrift_keepalive_sec', '')
+thrift_infoport = default('/configurations/global/hbase_thrift_infoport', '')
+thrift_nonblocking = default('/configurations/global/hbase_thrift_nonblocking', '')
+thrift_minWorkers = default('/configurations/global/hbase_thrift_minWorkers', '')
+thrift_queue = default('/configurations/global/hbase_thrift_queue', '')
+thrift_workers = default('/configurations/global/hbase_thrift_workers', '')
+thrift_compact = default('/configurations/global/hbase_thrift_compact', '')
+thrift_framed = default('/configurations/global/hbase_thrift_framed', '')
+thrift2_port = default('/configurations/global/hbase_thrift2_port', '')
+thrift2_compact = default('/configurations/global/hbase_thrift2_compact', '')
+thrift2_framed = default('/configurations/global/hbase_thrift2_framed', '')
+thrift2_infoport = default('/configurations/global/hbase_thrift2_infoport', '')
+thrift2_nonblocking = default('/configurations/global/hbase_thrift2_nonblocking', '')
 
 if security_enabled:
   _hostname_lowercase = config['hostname'].lower()
   master_jaas_princ = config['configurations']['hbase-site']['hbase.master.kerberos.principal'].replace('_HOST',_hostname_lowercase)
   regionserver_jaas_princ = config['configurations']['hbase-site']['hbase.regionserver.kerberos.principal'].replace('_HOST',_hostname_lowercase)
 
-    
+
 master_keytab_path = config['configurations']['hbase-site']['hbase.master.keytab.file']
 regionserver_keytab_path = config['configurations']['hbase-site']['hbase.regionserver.keytab.file']
 kinit_path_local = functions.get_kinit_path([default("kinit_path_local",None), "/usr/bin", "/usr/kerberos/bin", "/usr/sbin"])
-if security_enabled:
-  kinit_cmd = format("{kinit_path_local} -kt {hbase_user_keytab} {hbase_user};")
-else:
-  kinit_cmd = ""
 
 #log4j.properties
 if (('hbase-log4j' in config['configurations']) and ('content' in config['configurations']['hbase-log4j'])):

@@ -41,40 +41,26 @@ tserver_heapsize = config['configurations']['accumulo-env']['tserver_heapsize']
 monitor_heapsize = config['configurations']['accumulo-env']['monitor_heapsize']
 gc_heapsize = config['configurations']['accumulo-env']['gc_heapsize']
 other_heapsize = config['configurations']['accumulo-env']['other_heapsize']
-env_sh_template = config['configurations']['accumulo-env']['content']
+env_sh_template = config['configurations']['accumulo-env']['server_content']
 
 # accumulo local directory structure
 accumulo_root = config['configurations']['global']['app_root']
+app_version = config['configurations']['global']['app_version']
+app_name = config['clusterName']
 conf_dir = format("{accumulo_root}/conf")
 log_dir = config['configurations']['global']['app_log_dir']
 daemon_script = format("{accumulo_root}/bin/accumulo")
+proxy_conf = format("{conf_dir}/proxy.properties")
 
-# accumulo monitor certificate properties
-monitor_security_enabled = config['configurations']['global']['monitor_protocol'] == "https"
-monitor_keystore_property = "monitor.ssl.keyStore"
-monitor_truststore_property = "monitor.ssl.trustStore"
-
-# accumulo ssl properties
-ssl_enabled = False
-if 'instance.rpc.ssl.enabled' in config['configurations']['accumulo-site']:
-  ssl_enabled = config['configurations']['accumulo-site']['instance.rpc.ssl.enabled']
-clientauth_enabled = False
-if 'instance.rpc.ssl.clientAuth' in config['configurations']['accumulo-site']:
-  clientauth_enabled = config['configurations']['accumulo-site']['instance.rpc.ssl.clientAuth']
-ssl_cert_dir = config['configurations']['global']['ssl_cert_dir']
-keystore_path = format("{conf_dir}/ssl/keystore.jks")
-truststore_path = format("{conf_dir}/ssl/truststore.jks")
-ssl_keystore_file_property = "rpc.javax.net.ssl.keyStore"
-ssl_truststore_file_property = "rpc.javax.net.ssl.trustStore"
-credential_provider = config['configurations']['accumulo-site']["general.security.credential.provider.paths"]
-#credential_provider = credential_provider.replace("${HOST}", hostname) # if enabled, must propagate to configuration
-if ssl_keystore_file_property in config['configurations']['accumulo-site']:
-  keystore_path = config['configurations']['accumulo-site'][ssl_keystore_file_property]
-if ssl_truststore_file_property in config['configurations']['accumulo-site']:
-  truststore_path = config['configurations']['accumulo-site'][ssl_truststore_file_property]
+# accumulo kerberos user auth
+kerberos_auth_enabled = False
+if 'instance.security.authenticator' in config['configurations']['accumulo-site']\
+    and "org.apache.accumulo.server.security.handler.KerberosAuthenticator" == config['configurations']['accumulo-site']['instance.security.authenticator']:
+  kerberos_auth_enabled = True
 
 # accumulo initialization parameters
 accumulo_instance_name = config['configurations']['client']['instance.name']
+accumulo_root_principal = config['configurations']['global']['accumulo_root_principal']
 accumulo_root_password = config['configurations']['global']['accumulo_root_password']
 accumulo_hdfs_root_dir = config['configurations']['accumulo-site']['instance.volumes'].split(",")[0]
 
@@ -83,3 +69,11 @@ if (('accumulo-log4j' in config['configurations']) and ('content' in config['con
   log4j_props = config['configurations']['accumulo-log4j']['content']
 else:
   log4j_props = None
+
+metric_collector_host = default('/configurations/global/metric_collector_host', '')
+metric_collector_port = default('/configurations/global/metric_collector_port', '')
+metric_collector_lib = default('/configurations/global/metric_collector_lib', '')
+has_metric_collector = 1
+if not metric_collector_lib:
+  has_metric_collector = 0
+

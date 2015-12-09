@@ -18,6 +18,8 @@
 
 package org.apache.slider.providers;
 
+import org.apache.slider.api.ResourceKeys;
+
 /**
  * Provider role and key for use in app requests.
  * 
@@ -27,16 +29,42 @@ package org.apache.slider.providers;
 public final class ProviderRole {
   public final String name;
   public final int id;
-  public final int placementPolicy;
+  public int placementPolicy;
+  public int nodeFailureThreshold;
+  public final long placementTimeoutSeconds;
+  public final String labelExpression;
 
   public ProviderRole(String name, int id) {
-    this(name, id, PlacementPolicy.DEFAULT);
+    this(name,
+        id,
+        PlacementPolicy.DEFAULT,
+        ResourceKeys.DEFAULT_NODE_FAILURE_THRESHOLD,
+        ResourceKeys.DEFAULT_PLACEMENT_ESCALATE_DELAY_SECONDS,
+        ResourceKeys.DEF_YARN_LABEL_EXPRESSION);
   }
 
-  public ProviderRole(String name, int id, int policy) {
+  /**
+   * Create a provider role
+   * @param name role/component name
+   * @param id ID. This becomes the YARN priority
+   * @param policy placement policy
+   * @param nodeFailureThreshold threshold for node failures (within a reset interval)
+   * after which a node failure is considered an app failure
+   * @param placementTimeoutSeconds for lax placement, timeout in seconds before
+   * @param labelExpression label expression for requests; may be null
+   */
+  public ProviderRole(String name,
+      int id,
+      int policy,
+      int nodeFailureThreshold,
+      long placementTimeoutSeconds,
+      String labelExpression) {
     this.name = name;
     this.id = id;
     this.placementPolicy = policy;
+    this.nodeFailureThreshold = nodeFailureThreshold;
+    this.placementTimeoutSeconds = placementTimeoutSeconds;
+    this.labelExpression = labelExpression;
   }
 
   @Override
@@ -59,10 +87,14 @@ public final class ProviderRole {
 
   @Override
   public String toString() {
-    return "ProviderRole{" +
-           "name='" + name + '\'' +
-           ", id=" + id +
-           ", policy=" + placementPolicy +
-           '}';
+    final StringBuilder sb = new StringBuilder("ProviderRole{");
+    sb.append("name='").append(name).append('\'');
+    sb.append(", id=").append(id);
+    sb.append(", placementPolicy=").append(placementPolicy);
+    sb.append(", nodeFailureThreshold=").append(nodeFailureThreshold);
+    sb.append(", placementTimeoutSeconds=").append(placementTimeoutSeconds);
+    sb.append(", labelExpression='").append(labelExpression).append('\'');
+    sb.append('}');
+    return sb.toString();
   }
 }

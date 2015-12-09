@@ -21,7 +21,6 @@ package org.apache.slider.common.params;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.Parameters;
 
-
 @Parameters(commandNames = {SliderActions.ACTION_AM_SUICIDE},
             commandDescription = SliderActions.DESCRIBE_ACTION_AM_SUICIDE)
 public class ActionAMSuicideArgs extends AbstractActionArgs {
@@ -33,7 +32,7 @@ public class ActionAMSuicideArgs extends AbstractActionArgs {
   
   @Parameter(names = {ARG_MESSAGE},
              description = "reason for the action")
-  public String message;
+  public String message = "";
   
   @Parameter(names = {ARG_EXITCODE},
              description = "exit code")

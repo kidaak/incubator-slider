@@ -18,31 +18,44 @@
 
 package org.apache.slider.client;
 
-import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import org.apache.commons.lang.StringUtils;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.KillApplicationRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.KillApplicationResponse;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationReport;
+import org.apache.hadoop.yarn.api.records.NodeReport;
+import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.client.api.impl.YarnClientImpl;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.hadoop.yarn.util.Records;
+import org.apache.slider.api.types.NodeInformation;
+import org.apache.slider.api.types.NodeInformationList;
 import org.apache.slider.common.SliderKeys;
+import org.apache.slider.common.params.ActionNodesArgs;
+import org.apache.slider.common.tools.CoreFileSystem;
 import org.apache.slider.common.tools.Duration;
+import org.apache.slider.common.tools.SliderFileSystem;
 import org.apache.slider.common.tools.SliderUtils;
 import org.apache.slider.core.exceptions.BadCommandArgumentsException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.BindException;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -51,8 +64,26 @@ import java.util.Set;
  * from the slider entry point service
  */
 public class SliderYarnClientImpl extends YarnClientImpl {
-  protected static final Logger
-    log = LoggerFactory.getLogger(SliderYarnClientImpl.class);
+  protected static final Logger log = LoggerFactory.getLogger(SliderYarnClientImpl.class);
+
+  /**
+   * Keyword to use in the {@link #emergencyForceKill(String)}
+   * operation to force kill <i>all</i> application instances belonging
+   * to a specific user
+   */
+  public static final String KILL_ALL = "all";
+
+  @Override
+  protected void serviceInit(Configuration conf) throws Exception {
+    InetSocketAddress clientRpcAddress = SliderUtils.getRmAddress(conf);
+    if (!SliderUtils.isAddressDefined(clientRpcAddress)) {
+      // address isn't known; fail fast
+      throw new BindException("Invalid " + YarnConfiguration.RM_ADDRESS
+          + " value:" + conf.get(YarnConfiguration.RM_ADDRESS)
+          + " - see https://wiki.apache.org/hadoop/UnsetHostnameOrPort");
+    }
+    super.serviceInit(conf);
+  }
 
   /**
    * Get the RM Client RPC interface
@@ -62,18 +93,33 @@ public class SliderYarnClientImpl extends YarnClientImpl {
     return rmClient;
   }
 
-
   /**
-   * List Slider instances belonging to a specific user
+   * List Slider <i>running</i>instances belonging to a specific user.
+   * @deprecated use {@link #listDeployedInstances(String)}
    * @param user user: "" means all users
    * @return a possibly empty list of Slider AMs
    */
   public List<ApplicationReport> listInstances(String user)
     throws YarnException, IOException {
-    Set<String> types = new HashSet<String>(1);
+    return listDeployedInstances(user);
+  }
+
+  /**
+   * List Slider <i>deployed</i>instances belonging to a specific user.
+   * <p>
+   *   Deployed means: known about in the YARN cluster; it will include
+   *   any that are in the failed/finished state, as well as those queued
+   *   for starting.
+   * @param user user: "" means all users
+   * @return a possibly empty list of Slider AMs
+   */
+  public List<ApplicationReport> listDeployedInstances(String user)
+    throws YarnException, IOException {
+    Preconditions.checkArgument(user != null, "Null User");
+    Set<String> types = new HashSet<>(1);
     types.add(SliderKeys.APP_TYPE);
     List<ApplicationReport> allApps = getApplications(types);
-    List<ApplicationReport> results = new ArrayList<ApplicationReport>();
+    List<ApplicationReport> results = new ArrayList<>();
     for (ApplicationReport report : allApps) {
       if (StringUtils.isEmpty(user) || user.equals(report.getUser())) {
         results.add(report);
@@ -82,22 +128,22 @@ public class SliderYarnClientImpl extends YarnClientImpl {
     return results;
   }
 
-
   /**
-   * find all instances of a specific app -if there is >1 in the cluster,
+   * find all instances of a specific app -if there is more than one in the
+   * YARN cluster,
    * this returns them all
-   * @param user user
+   * @param user user; use "" for all users
    * @param appname application name
    * @return the list of all matching application instances
    */
-  @VisibleForTesting
   public List<ApplicationReport> findAllInstances(String user,
-                                                  String appname) throws
-                                                                  IOException,
-                                                                  YarnException {
-    List<ApplicationReport> instances = listInstances(user);
+                                                  String appname)
+      throws IOException, YarnException {
+    Preconditions.checkArgument(appname != null, "Null application name");
+
+    List<ApplicationReport> instances = listDeployedInstances(user);
     List<ApplicationReport> results =
-      new ArrayList<ApplicationReport>(instances.size());
+      new ArrayList<>(instances.size());
     for (ApplicationReport report : instances) {
       if (report.getName().equals(appname)) {
         results.add(report);
@@ -113,22 +159,24 @@ public class SliderYarnClientImpl extends YarnClientImpl {
    * @return true if the application is considered live
    */
   public boolean isApplicationLive(ApplicationReport app) {
-    return app.getYarnApplicationState().ordinal() <=
-           YarnApplicationState.RUNNING.ordinal();
+    Preconditions.checkArgument(app != null, "Null app report");
+
+    return app.getYarnApplicationState().ordinal() <= YarnApplicationState.RUNNING.ordinal();
   }
 
 
   /**
    * Kill a running application
-   * @param applicationId
+   * @param applicationId app Id
+   * @param reason reason: reason for log
    * @return the response
    * @throws YarnException YARN problems
    * @throws IOException IO problems
    */
   public  KillApplicationResponse killRunningApplication(ApplicationId applicationId,
-                                                         String reason) throws
-                                                                        YarnException,
-                                                                        IOException {
+                                                         String reason)
+      throws YarnException, IOException {
+    Preconditions.checkArgument(applicationId != null, "Null application Id");
     log.info("Killing application {} - {}", applicationId.getClusterTimestamp(),
              reason);
     KillApplicationRequest request =
@@ -140,19 +188,23 @@ public class SliderYarnClientImpl extends YarnClientImpl {
   private String getUsername() throws IOException {
     return UserGroupInformation.getCurrentUser().getShortUserName();
   }
+  
   /**
    * Force kill a yarn application by ID. No niceities here
+   * @param applicationId app Id. "all" means "kill all instances of the current user
+   * 
    */
-  public void emergencyForceKill(String applicationId) throws
-                                                            YarnException,
-                                                            IOException {
-    
+  public void emergencyForceKill(String applicationId)
+      throws YarnException, IOException {
 
-    if ("all".equals(applicationId)) {
+    Preconditions.checkArgument(StringUtils.isNotEmpty(applicationId),
+        "Null/empty application Id");
+
+    if (KILL_ALL.equals(applicationId)) {
       // user wants all instances killed
       String user = getUsername();
       log.info("Killing all applications belonging to {}", user);
-      Collection<ApplicationReport> instances = listInstances(user);
+      Collection<ApplicationReport> instances = listDeployedInstances(user);
       for (ApplicationReport instance : instances) {
         if (isApplicationLive(instance)) {
           ApplicationId appId = instance.getApplicationId();
@@ -195,35 +247,38 @@ public class SliderYarnClientImpl extends YarnClientImpl {
               duration.limit,
               desiredState);
     duration.start();
-    while (true) {
+    try {
+      while (true) {
+        // Get application report for the appId we are interested in
 
-      // Get application report for the appId we are interested in
+        ApplicationReport r = getApplicationReport(appId);
 
-      ApplicationReport r = getApplicationReport(appId);
-
-      log.debug("queried status is\n{}",
-                new SliderUtils.OnDemandReportStringifier(r));
-
-      YarnApplicationState state = r.getYarnApplicationState();
-      if (state.ordinal() >= desiredState.ordinal()) {
-        log.debug("App in desired state (or higher) :{}", state);
-        return r;
-      }
-      if (duration.getLimitExceeded()) {
-        log.debug(
-          "Wait limit of {} millis to get to state {}, exceeded; app status\n {}",
-          duration.limit,
-          desiredState,
+        log.debug("queried status is\n{}",
           new SliderUtils.OnDemandReportStringifier(r));
-        return null;
-      }
 
-      // sleep 1s.
-      try {
-        Thread.sleep(1000);
-      } catch (InterruptedException ignored) {
-        log.debug("Thread sleep in monitoring loop interrupted");
+        YarnApplicationState state = r.getYarnApplicationState();
+        if (state.ordinal() >= desiredState.ordinal()) {
+          log.debug("App in desired state (or higher) :{}", state);
+          return r;
+        }
+        if (duration.getLimitExceeded()) {
+          log.debug(
+            "Wait limit of {} millis to get to state {}, exceeded; app status\n {}",
+            duration.limit,
+            desiredState,
+            new SliderUtils.OnDemandReportStringifier(r));
+          return null;
+        }
+
+        // sleep 1s.
+        try {
+          Thread.sleep(1000);
+        } catch (InterruptedException ignored) {
+          log.debug("Thread sleep in monitoring loop interrupted");
+        }
       }
+    } finally {
+      duration.close();
     }
   }
 
@@ -238,7 +293,9 @@ public class SliderYarnClientImpl extends YarnClientImpl {
                                                       String appname) throws
                                                                       YarnException,
                                                                       IOException {
-    List<ApplicationReport> instances = listInstances(user);
+    Preconditions.checkArgument(StringUtils.isNotEmpty(appname),
+        "Null/empty application name");
+    List<ApplicationReport> instances = listDeployedInstances(user);
     List<ApplicationReport> results =
       new ArrayList<ApplicationReport>(instances.size());
     for (ApplicationReport app : instances) {
@@ -259,6 +316,9 @@ public class SliderYarnClientImpl extends YarnClientImpl {
    */
   public ApplicationReport findClusterInInstanceList(List<ApplicationReport> instances,
                                                      String appname) {
+    Preconditions.checkArgument(instances != null, "Null instances list");
+    Preconditions.checkArgument(StringUtils.isNotEmpty(appname),
+        "Null/empty application name");
     // sort by most recent
     SliderUtils.sortApplicationsByMostRecent(instances);
     ApplicationReport found = null;
@@ -284,8 +344,10 @@ public class SliderYarnClientImpl extends YarnClientImpl {
   public ApplicationReport findAppInInstanceList(List<ApplicationReport> instances,
       String appname,
       YarnApplicationState desiredState) {
-    ApplicationReport found = null;
-    ApplicationReport foundAndLive = null;
+    Preconditions.checkArgument(instances != null, "Null instances list");
+    Preconditions.checkArgument(StringUtils.isNotEmpty(appname),
+        "Null/empty application name");
+    Preconditions.checkArgument(desiredState != null, "Null desiredState");
     log.debug("Searching {} records for instance name {} in state '{}'",
         instances.size(), appname, desiredState);
     for (ApplicationReport app : instances) {
@@ -305,5 +367,44 @@ public class SliderYarnClientImpl extends YarnClientImpl {
     return null;
   }
 
-
+  /**
+   * List the nodes in the cluster, possibly filtering by node state or label.
+   *
+   * @param label label to filter by -or "" for any
+   * @param live flag to request running nodes only
+   * @return a possibly empty list of nodes in the cluster
+   * @throws IOException IO problems
+   * @throws YarnException YARN problems
+   */
+  public NodeInformationList listNodes(String label, boolean live)
+    throws IOException, YarnException {
+    Preconditions.checkArgument(label != null, "null label");
+    NodeState[] states;
+    if (live) {
+      states = new NodeState[1];
+      states[0] = NodeState.RUNNING;
+    } else {
+      states = new NodeState[0];
+    }
+    List<NodeReport> reports = getNodeReports(states);
+    NodeInformationList results = new NodeInformationList(reports.size());
+    for (NodeReport report : reports) {
+      if (live && report.getNodeState() != NodeState.RUNNING) {
+        continue;
+      }
+      if (!label.isEmpty() && !report.getNodeLabels().contains(label)) {
+        continue;
+      }
+      // build node info from report
+      NodeInformation info = new NodeInformation();
+      info.hostname = report.getNodeId().getHost();
+      info.healthReport  = report.getHealthReport();
+      info.httpAddress = report.getHttpAddress();
+      info.labels = SliderUtils.extractNodeLabel(report);
+      info.rackName = report.getRackName();
+      info.state = report.getNodeState().toString();
+      results.add(info);
+    }
+    return results;
+  }
 }

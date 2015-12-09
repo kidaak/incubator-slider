@@ -106,6 +106,11 @@ class TestPublisherRestResources extends AgentTestBase {
     webResource = client.resource(sliderConfigset);
     webResource = client.resource(sliderConfigset + "dummy-site");
 
+
+    execOperation(WEB_STARTUP_TIME) {
+      GET(sliderConfigset)
+    }
+
     PublishedConfiguration config = webResource.type(MediaType.APPLICATION_JSON)
                           .get(PublishedConfiguration.class);
     assert config != null

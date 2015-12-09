@@ -41,6 +41,10 @@ class TestZKIntegration extends YarnZKMiniClusterTestBase implements KeysForTest
 
   // as the static compiler doesn't resolve consistently
   public static final String USER = KeysForTests.USERNAME
+<<<<<<< HEAD
+=======
+  public static final int CONNECT_TIMEOUT = 5000
+>>>>>>> refs/remotes/apache/develop
   private ZKIntegration zki
 
   @Before
@@ -61,7 +65,11 @@ class TestZKIntegration extends YarnZKMiniClusterTestBase implements KeysForTest
 
   public ZKIntegration initZKI() {
     zki = createZKIntegrationInstance(
+<<<<<<< HEAD
         getZKBinding(), methodName.methodName, true, false, 5000)
+=======
+        getZKBinding(), methodName.methodName, true, false, CONNECT_TIMEOUT)
+>>>>>>> refs/remotes/apache/develop
     return zki
   }
 
@@ -99,7 +107,7 @@ class TestZKIntegration extends YarnZKMiniClusterTestBase implements KeysForTest
     log.info("Ephemeral path $c2")
     List<String> clusters = zki.clusters
     assert clusters.size() == 2
-    assert (c1.endsWith(clusters[0]) && c1.endsWith(clusters[1])) ||
+    assert (c1.endsWith(clusters[0]) && c2.endsWith(clusters[1])) ||
            (c1.endsWith(clusters[1]) && c2.endsWith(clusters[0]))
   }
 
@@ -107,17 +115,21 @@ class TestZKIntegration extends YarnZKMiniClusterTestBase implements KeysForTest
   public void testCreateAndDeleteDefaultZKPath() throws Throwable {
     MockSliderClient client = new MockSliderClient()
 
+<<<<<<< HEAD
     String path = client.createZookeeperNode("cl1", true)
+=======
+    String path = client.createZookeeperNodeInner("cl1", true)
+>>>>>>> refs/remotes/apache/develop
     zki = client.lastZKIntegration
 
     String zkPath = ZKIntegration.mkClusterPath(USER, "cl1")
     assert zkPath == "/services/slider/users/" + USER + "/cl1", "zkPath must be as expected"
     assert path == zkPath
     assert zki == null, "ZKIntegration should be null."
-    zki = createZKIntegrationInstance(getZKBinding(), "cl1", true, false, 5000);
+    zki = createZKIntegrationInstance(getZKBinding(), "cl1", true, false, CONNECT_TIMEOUT);
     assert !zki.exists(zkPath)
 
-    path = client.createZookeeperNode("cl1", false)
+    path = client.createZookeeperNodeInner("cl1", false)
     zki = client.lastZKIntegration
     assert zki 
     assert zkPath == "/services/slider/users/" + USER + "/cl1", "zkPath must be as expected"
@@ -145,7 +157,11 @@ class TestZKIntegration extends YarnZKMiniClusterTestBase implements KeysForTest
 
     @Override
     protected ZKIntegration getZkClient(String clusterName, String user) {
+<<<<<<< HEAD
       zki = createZKIntegrationInstance(getZKBinding(), clusterName, true, false, 5000)
+=======
+      zki = createZKIntegrationInstance(getZKBinding(), clusterName, true, false, CONNECT_TIMEOUT)
+>>>>>>> refs/remotes/apache/develop
       return zki;
     }
 

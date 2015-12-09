@@ -20,21 +20,22 @@ package org.apache.slider.server.appmaster.model.appstate
 
 import groovy.transform.CompileStatic
 import groovy.util.logging.Slf4j
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.slider.api.ResourceKeys
+import org.apache.slider.core.conf.AggregateConf
 import org.apache.slider.core.conf.ConfTreeOperations
 import org.apache.slider.core.exceptions.BadConfigException
 import org.apache.slider.server.appmaster.model.mock.BaseMockAppStateTest
 import org.apache.slider.server.appmaster.model.mock.MockAppState
 import org.apache.slider.server.appmaster.model.mock.MockRoles
 import org.apache.slider.server.appmaster.model.mock.MockYarnEngine
-import org.apache.slider.server.appmaster.state.SimpleReleaseSelector
+import org.apache.slider.server.appmaster.state.AppStateBindingInfo
+import org.apache.slider.server.appmaster.state.MostRecentContainerReleaseSelector
 import org.apache.slider.server.avro.RoleHistoryWriter
 import org.junit.Test
 
 /**
- * Test that if you have >1 role, the right roles are chosen for release.
+ * Test that if you have more than one role, the right roles are chosen for release.
  */
 @CompileStatic
 @Slf4j
@@ -57,31 +58,25 @@ class TestMockAppStateFlexDynamicRoles extends BaseMockAppStateTest
   }
 
   @Override
-  void initApp() {
-    super.initApp()
-    appState = new MockAppState()
-    appState.setContainerLimits(RM_MAX_RAM, RM_MAX_CORES)
+  AppStateBindingInfo buildBindingInfo() {
+    def bindingInfo = super.buildBindingInfo()
+    bindingInfo.releaseSelector = new MostRecentContainerReleaseSelector()
+    bindingInfo
+  }
 
+  @Override
+  AggregateConf buildInstanceDefinition() {
     def instance = factory.newInstanceDefinition(0, 0, 0)
 
     def opts = [
         (ResourceKeys.COMPONENT_INSTANCES): "1",
-        (ResourceKeys.COMPONENT_PRIORITY): "6",
+        (ResourceKeys.COMPONENT_PRIORITY) : "6",
     ]
 
     instance.resourceOperations.components["dynamic-6"] = opts
-
-    
-    appState.buildInstance(instance,
-        new Configuration(),
-        new Configuration(false),
-        factory.ROLES,
-        fs,
-        historyPath,
-        null, null, new SimpleReleaseSelector())
+    instance
   }
 
-  
   private ConfTreeOperations init() {
     createAndStartNodes();
     def resources = appState.instanceDefinition.resources;
@@ -158,7 +153,8 @@ class TestMockAppStateFlexDynamicRoles extends BaseMockAppStateTest
     cd.components["HistorySaveFlexLoad"] = opts
     appState.updateResourceDefinitions(cd.confTree);
     createAndStartNodes();
-    historyWriter.read(fs, history, appState.roleHistory)
+    def loadedRoleHistory = historyWriter.read(fs, history)
+    assert 0 == appState.roleHistory.rebuild(loadedRoleHistory)
   }
 
   @Test
@@ -179,22 +175,13 @@ class TestMockAppStateFlexDynamicRoles extends BaseMockAppStateTest
     def historyWorkDir2 = new File("target/history" + testName + "-0002")
     def historyPath2 = new Path(historyWorkDir2.toURI())
     appState = new MockAppState()
-    appState.setContainerLimits(RM_MAX_RAM, RM_MAX_CORES)
-    appState.buildInstance(
-        factory.newInstanceDefinition(0, 0, 0),
-        new Configuration(),
-        new Configuration(false),
-        factory.ROLES,
-        fs,
-        historyPath2,
-        null, null, new SimpleReleaseSelector())
+    def binding2 = buildBindingInfo()
+    binding2.instanceDefinition = factory.newInstanceDefinition(0, 0, 0)
+    binding2.historyPath = historyPath2
+    appState.buildInstance(binding2)
     // on this read there won't be the right number of roles
-    try {
-      historyWriter.read(fs, history, appState.roleHistory)
-      fail("expected an exception")
-    } catch (IOException e) {
-      assert e.toString().contains("Number of roles")
-    }
+    def loadedRoleHistory = historyWriter.read(fs, history)
+    assert 0 == appState.roleHistory.rebuild(loadedRoleHistory)
   }
 
 }

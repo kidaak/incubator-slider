@@ -97,7 +97,7 @@ class TestWindowsSupport extends YarnMiniClusterTestBase {
     assumeWindows()
     SliderFileSystem sfs = new SliderFileSystem(new Configuration())
     try {
-      def metainfo = AgentUtils.getApplicationMetainfo(sfs, windowsFile)
+      def metainfo = AgentUtils.getApplicationMetainfo(sfs, windowsFile, false)
     } catch (FileNotFoundException fnfe) {
       // expected
     }
@@ -122,7 +122,11 @@ class TestWindowsSupport extends YarnMiniClusterTestBase {
 
   @Test
   public void testExecNonexistentBinary() throws Throwable {
+<<<<<<< HEAD
     assume(Shell.WINDOWS, "not windows")
+=======
+    assumeWindows()
+>>>>>>> refs/remotes/apache/develop
     def commands = ["undefined-application", "--version"]
     try {
       exec(0, commands)
@@ -136,11 +140,15 @@ class TestWindowsSupport extends YarnMiniClusterTestBase {
   @Test
   public void testExecNonexistentBinary2() throws Throwable {
     assumeWindows()
+<<<<<<< HEAD
     assert !doesWindowsAppExist(["undefined-application", "--version"])
   }
 
   public assumeWindows() {
     assume(Shell.WINDOWS, "not windows")
+=======
+    assert !doesAppExist(["undefined-application", "--version"])
+>>>>>>> refs/remotes/apache/develop
   }
 
   @Test
@@ -194,6 +202,7 @@ class TestWindowsSupport extends YarnMiniClusterTestBase {
     File exepath = locateExecutable("HADOOP.DLL")
     assert exepath
     log.info "Hadoop DLL at: $exepath"
+<<<<<<< HEAD
   }
 
   public File locateExecutable(String exe) {
@@ -223,5 +232,8 @@ class TestWindowsSupport extends YarnMiniClusterTestBase {
     log.info("Path env variable is $pathkey")
     def path = System.getenv(pathkey)
     return path
+=======
+>>>>>>> refs/remotes/apache/develop
   }
+
 }

@@ -148,7 +148,7 @@ public class ConfTreeOperations {
       return operations;
     }
     //create a new instances
-    Map<String, String> map = new HashMap<String, String>();
+    Map<String, String> map = new HashMap<>();
     confTree.components.put(name, map);
     return new MapOperations(name, map);
   }
@@ -429,9 +429,17 @@ public class ConfTreeOperations {
    * @param option option name
    * @param val integer value
    */
-  public void setRoleOpt(String role, String option, int val) {
+  public void setComponentOpt(String role, String option, int val) {
     setComponentOpt(role, option, Integer.toString(val));
   }
+  /**
+   * Set a long role option, creating the role if necessary
+   * @param role role name
+   * @param option option name
+   * @param val long value
+   */
+  public void setComponentOpt(String role, String option, long val) {
+    setComponentOpt(role, option, Long.toString(val));
+  }
 
-  
 }

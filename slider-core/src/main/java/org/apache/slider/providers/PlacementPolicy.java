@@ -19,14 +19,26 @@
 package org.apache.slider.providers;
 
 /**
- * Placement values
+ * Placement values.
+ * This is nominally a bitmask, though not all values make sense
  */
 public class PlacementPolicy {
 
   /**
+<<<<<<< HEAD
    * Default values
    */
   public static final int DEFAULT = 0;
+=======
+   * Default value: history used, anti-affinity hinted at on rebuild/flex up
+   */
+  public static final int NONE = 0;
+
+  /**
+   * Default value: history used, anti-affinity hinted at on rebuild/flex up
+   */
+  public static final int DEFAULT = NONE;
+>>>>>>> refs/remotes/apache/develop
 
   /**
    * Strict placement: when asking for an instance for which there is
@@ -35,11 +47,20 @@ public class PlacementPolicy {
   public static final int STRICT = 1;
 
   /**
+<<<<<<< HEAD
    * No data locality; do not bother trying to ask for any location
    */
   public static final int NO_DATA_LOCALITY = 2;
   /**
    * Anti-affinity is mandatory. 
+=======
+   * No data locality; do not use placement history
+   */
+  public static final int NO_DATA_LOCALITY = 2;
+
+  /**
+   * Anti-affinity is mandatory.
+>>>>>>> refs/remotes/apache/develop
    */
   public static final int ANTI_AFFINITY_REQUIRED = 4;
   

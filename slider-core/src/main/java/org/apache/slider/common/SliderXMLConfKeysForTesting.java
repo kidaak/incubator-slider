@@ -22,14 +22,7 @@ package org.apache.slider.common;
  * Keys shared across tests
  */
 public interface SliderXMLConfKeysForTesting {
-
-  String KEY_TEST_HBASE_HOME = "slider.test.hbase.home";
-  String KEY_TEST_HBASE_TAR = "slider.test.hbase.tar";
-  String KEY_TEST_HBASE_APPCONF = "slider.test.hbase.appconf";
-  String KEY_TEST_ACCUMULO_HOME = "slider.test.accumulo.home";
-  String KEY_TEST_ACCUMULO_TAR = "slider.test.accumulo.tar";
-  String KEY_TEST_ACCUMULO_APPCONF = "slider.test.accumulo.appconf";
-
+  
   String KEY_TEST_THAW_WAIT_TIME = "slider.test.thaw.wait.seconds";
 
   int DEFAULT_THAW_WAIT_TIME_SECONDS = 60;
@@ -42,6 +35,7 @@ public interface SliderXMLConfKeysForTesting {
   String KEY_TEST_TIMEOUT = "slider.test.timeout.seconds";
 
   int DEFAULT_TEST_TIMEOUT_SECONDS = 30 * 60;
+<<<<<<< HEAD
 
   String KEY_TEST_HBASE_LAUNCH_TIME = "slider.test.hbase.launch.wait.seconds";
 
@@ -50,6 +44,8 @@ public interface SliderXMLConfKeysForTesting {
   String KEY_TEST_HBASE_ENABLED = "slider.test.hbase.enabled";
 
   String KEY_TEST_ACCUMULO_ENABLED = "slider.test.accumulo.enabled";
+=======
+>>>>>>> refs/remotes/apache/develop
 
   String KEY_ACCUMULO_LAUNCH_TIME =
     "slider.test.accumulo.launch.wait.seconds";
@@ -88,4 +84,5 @@ public interface SliderXMLConfKeysForTesting {
    * Local path to AM keytab: {@value}
    */
   String KEY_TEST_AM_KEYTAB = "slider.test.am.keytab.local";
+
 }

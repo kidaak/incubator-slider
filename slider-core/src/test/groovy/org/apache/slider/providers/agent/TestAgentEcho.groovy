@@ -22,11 +22,17 @@ import groovy.transform.CompileStatic
 import groovy.util.logging.Slf4j
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.slider.api.ResourceKeys
+import org.apache.slider.api.types.NodeInformationList
 import org.apache.slider.client.SliderClient
 import org.apache.slider.common.SliderExitCodes
 import org.apache.slider.common.SliderXmlConfKeys
+<<<<<<< HEAD
+=======
+import org.apache.slider.common.params.ActionNodesArgs
+>>>>>>> refs/remotes/apache/develop
 import org.apache.slider.core.exceptions.BadClusterStateException
 import org.apache.slider.core.main.ServiceLauncher
+import org.apache.slider.core.persist.JsonSerDeser
 import org.junit.Before
 import org.junit.Test
 
@@ -40,6 +46,7 @@ import static org.apache.slider.providers.agent.AgentKeys.*
 @Slf4j
 class TestAgentEcho extends AgentTestBase {
 
+  protected static final String ECHO = "echo"
   File slider_core
   String echo_py
   File echo_py_path
@@ -59,7 +66,6 @@ class TestAgentEcho extends AgentTestBase {
     agt_ver_path = new File(slider_core, agt_ver)
     agt_conf = "agent.ini"
     agt_conf_path = new File(slider_core, agt_conf)
-
   }
   
   @Override
@@ -68,7 +74,11 @@ class TestAgentEcho extends AgentTestBase {
   }
 
   @Test
+<<<<<<< HEAD
   public void testEchoOperation() throws Throwable {
+=======
+  public void testAgentEcho() throws Throwable {
+>>>>>>> refs/remotes/apache/develop
     assumeValidServerEnv()
 
     String clustername = createMiniCluster("",
@@ -79,12 +89,9 @@ class TestAgentEcho extends AgentTestBase {
         true,
         false)
 
-    assert echo_py_path.exists()
-    assert app_def_path.exists()
-    assert agt_ver_path.exists()
-    assert agt_conf_path.exists()
+    validatePaths()
 
-    def role = "echo"
+    def role = ECHO
     Map<String, Integer> roles = [
         (role): 2,
     ];
@@ -99,7 +106,13 @@ class TestAgentEcho extends AgentTestBase {
             ARG_COMP_OPT, role, SCRIPT_PATH, echo_py,
             ARG_COMP_OPT, role, SERVICE_NAME, "Agent",
             ARG_DEFINE, 
+<<<<<<< HEAD
             SliderXmlConfKeys.KEY_SLIDER_AM_DEPENDENCY_CHECKS_DISABLED + "=false" 
+=======
+            SliderXmlConfKeys.KEY_SLIDER_AM_DEPENDENCY_CHECKS_DISABLED + "=false",
+            ARG_COMP_OPT, role, TEST_RELAX_VERIFICATION, "true",
+
+>>>>>>> refs/remotes/apache/develop
         ],
         true, true,
         true)
@@ -125,5 +138,41 @@ class TestAgentEcho extends AgentTestBase {
       assertExceptionDetails(e, SliderExitCodes.EXIT_BAD_STATE, "negative")
     }
 
+
+    runNodemapTests(sliderClient)
+
+  }
+
+  /**
+   * do some nodemap checks, currently cluster-wide
+   * @param sliderClient
+   */
+  protected void runNodemapTests(SliderClient sliderClient) {
+    describe "slider nodes"
+    sliderClient.actionNodes("", new ActionNodesArgs())
+
+    def allNodes = sliderClient.listYarnClusterNodes(new ActionNodesArgs()).collect { it.httpAddress }
+    assert !allNodes.empty
+
+    // healthy only
+    def healthyNodes = sliderClient.listYarnClusterNodes(new ActionNodesArgs(healthy: true))
+    assert healthyNodes.collect { it.httpAddress }.containsAll(allNodes)
+    // look for an unknown label and expect none
+    def gpuNodes = sliderClient.listYarnClusterNodes(new ActionNodesArgs(label: "gpu"))
+    assert gpuNodes.empty
+    File t1 = createTempJsonFile()
+    sliderClient.actionNodes("", new ActionNodesArgs(outputFile: t1))
+    assert t1.exists()
+    JsonSerDeser<NodeInformationList> serDeser = new JsonSerDeser<>(NodeInformationList.class);
+    NodeInformationList loaded = serDeser.fromFile(t1)
+    assert allNodes.containsAll(loaded.collect { it.httpAddress })
+
+  }
+
+  protected void validatePaths() {
+    assert echo_py_path.exists()
+    assert app_def_path.exists()
+    assert agt_ver_path.exists()
+    assert agt_conf_path.exists()
   }
 }

@@ -21,9 +21,11 @@ package org.apache.slider.funtest.lifecycle
 import groovy.transform.CompileStatic
 import groovy.util.logging.Slf4j
 import org.apache.hadoop.yarn.api.records.YarnApplicationState
+import org.apache.slider.api.StatusKeys
 import org.apache.slider.common.SliderExitCodes
 import org.apache.slider.common.params.Arguments
 import org.apache.slider.common.params.SliderActions
+import org.apache.slider.funtest.ResourcePaths
 import org.apache.slider.funtest.framework.AgentCommandTestBase
 import org.apache.slider.funtest.framework.FuntestProperties
 import org.apache.slider.funtest.framework.SliderShell
@@ -66,8 +68,7 @@ implements FuntestProperties, Arguments, SliderExitCodes, SliderActions {
   private static String COMMAND_LOGGER = "COMMAND_LOGGER"
   private static String APPLICATION_NAME = "happy-path-with-queue-labels"
   private static String TARGET_QUEUE = "labeled"
-  private static String APP_RESOURCE4 =
-      "../slider-core/src/test/app_packages/test_command_log/resources_queue_labels.json"
+  private static String APP_RESOURCE4 = ResourcePaths.COMMAND_LOG_RESOURCES_QUEUE_LABELS
 
   @After
   public void destroyCluster() {
@@ -114,7 +115,13 @@ implements FuntestProperties, Arguments, SliderExitCodes, SliderActions {
 
     sleep(1000 * 20)
     def cd = execStatus(APPLICATION_NAME)
-    assert cd.statistics[COMMAND_LOGGER]["containers.requested"] >= 3
+    assert cd.statistics[COMMAND_LOGGER][
+        StatusKeys.STATISTICS_CONTAINERS_REQUESTED] >= 3
+    // check liveness
+    def liveness =  cd.liveness
+    assert liveness.allRequestsSatisfied
+    assert 0 == liveness.requestsOutstanding
+
     assertInYarnState(appId, YarnApplicationState.RUNNING)
   }
 

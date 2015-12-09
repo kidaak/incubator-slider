@@ -23,7 +23,6 @@ import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.slider.api.InternalKeys;
 import org.apache.slider.api.OptionKeys;
 import org.apache.slider.api.StatusKeys;
@@ -49,6 +48,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.Map;
 
+import static org.apache.slider.api.InternalKeys.INTERNAL_ADDONS_DIR_PATH;
+import static org.apache.slider.api.InternalKeys.INTERNAL_APPDEF_DIR_PATH;
 import static org.apache.slider.api.InternalKeys.INTERNAL_QUEUE;
 import static org.apache.slider.api.OptionKeys.INTERNAL_AM_TMP_DIR;
 import static org.apache.slider.api.OptionKeys.INTERNAL_TMP_DIR;
@@ -142,6 +143,10 @@ public class InstanceBuilder {
                     instancePaths.generatedConfPath.toUri());
     internalOps.set(INTERNAL_DATA_DIR_PATH,
                     instancePaths.dataPath.toUri());
+    internalOps.set(INTERNAL_APPDEF_DIR_PATH,
+                    instancePaths.appDefPath.toUri());
+    internalOps.set(INTERNAL_ADDONS_DIR_PATH,
+                    instancePaths.addonsPath.toUri());
 
 
     internalOps.set(InternalKeys.INTERNAL_PROVIDER_NAME, provider);
@@ -197,11 +202,10 @@ public class InstanceBuilder {
    * Propagate any critical principals from the current site config down to the HBase one.
    */
   public void propagatePrincipals() {
-    String dfsPrincipal = conf.get(
-        DFSConfigKeys.DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY);
+    String dfsPrincipal = conf.get(SliderXmlConfKeys.DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY);
     if (dfsPrincipal != null) {
       String siteDfsPrincipal = OptionKeys.SITE_XML_PREFIX +
-                                DFSConfigKeys.DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY;
+                                SliderXmlConfKeys.DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY;
       instanceDescription.getAppConfOperations().set(siteDfsPrincipal, dfsPrincipal);
     }
   }
@@ -247,7 +251,6 @@ public class InstanceBuilder {
    * @throws IOException
    * @throws SliderException
    * @throws LockAcquireFailedException
-   * @param appconfdir dir to persist the conf to
    */
   public void persist(Path appconfdir, boolean overwrite) throws
       IOException,

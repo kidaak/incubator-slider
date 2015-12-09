@@ -25,6 +25,7 @@ import org.apache.slider.api.ResourceKeys
 import org.apache.slider.core.conf.ConfTree
 import org.apache.slider.core.conf.ConfTreeOperations
 import org.apache.slider.server.appmaster.model.mock.BaseMockAppStateTest
+import org.apache.slider.server.appmaster.model.mock.MockAppState
 import org.apache.slider.server.appmaster.model.mock.MockRoles
 import org.apache.slider.server.appmaster.operations.AbstractRMOperation
 import org.apache.slider.server.appmaster.operations.ContainerRequestOperation
@@ -37,18 +38,13 @@ import org.junit.Test
 @Slf4j
 class TestMockContainerResourceAllocations extends BaseMockAppStateTest {
 
-  @Override
-  String getTestName() {
-    "TestMockContainerResourceAllocations"
-  }
-
   @Test
   public void testNormalAllocations() throws Throwable {
     ConfTree clusterSpec = factory.newConfTree(1, 0, 0)
     ConfTreeOperations cto = new ConfTreeOperations(clusterSpec)
 
-    cto.setRoleOpt(MockRoles.ROLE0, ResourceKeys.YARN_MEMORY, 512)
-    cto.setRoleOpt(MockRoles.ROLE0, ResourceKeys.YARN_CORES, 2)
+    cto.setComponentOpt(MockRoles.ROLE0, ResourceKeys.YARN_MEMORY, 512)
+    cto.setComponentOpt(MockRoles.ROLE0, ResourceKeys.YARN_CORES, 2)
     appState.updateResourceDefinitions(clusterSpec)
     List<AbstractRMOperation> ops = appState.reviewRequestAndReleaseNodes()
     assert ops.size() == 1
@@ -65,13 +61,13 @@ class TestMockContainerResourceAllocations extends BaseMockAppStateTest {
 
     cto.setComponentOpt(MockRoles.ROLE0, ResourceKeys.YARN_MEMORY,
                            ResourceKeys.YARN_RESOURCE_MAX)
-    cto.setRoleOpt(MockRoles.ROLE0, ResourceKeys.YARN_CORES, 2)
+    cto.setComponentOpt(MockRoles.ROLE0, ResourceKeys.YARN_CORES, 2)
     appState.updateResourceDefinitions(clusterSpec)
     List<AbstractRMOperation> ops = appState.reviewRequestAndReleaseNodes()
     assert ops.size() == 1
     ContainerRequestOperation operation = (ContainerRequestOperation) ops[0]
     Resource requirements = operation.request.capability
-    assert requirements.memory == RM_MAX_RAM
+    assert requirements.memory == MockAppState.RM_MAX_RAM
     assert requirements.virtualCores == 2
   }
   
@@ -79,7 +75,7 @@ class TestMockContainerResourceAllocations extends BaseMockAppStateTest {
   public void testMaxCoreAllocations() throws Throwable {
     ConfTree clusterSpec = factory.newConfTree(1, 0, 0)
     ConfTreeOperations cto = new ConfTreeOperations(clusterSpec)
-    cto.setRoleOpt(MockRoles.ROLE0, ResourceKeys.YARN_MEMORY,
+    cto.setComponentOpt(MockRoles.ROLE0, ResourceKeys.YARN_MEMORY,
         512)
     cto.setComponentOpt(MockRoles.ROLE0, ResourceKeys.YARN_CORES,
         ResourceKeys.YARN_RESOURCE_MAX)
@@ -89,7 +85,7 @@ class TestMockContainerResourceAllocations extends BaseMockAppStateTest {
     ContainerRequestOperation operation = (ContainerRequestOperation) ops[0]
     Resource requirements = operation.request.capability
     assert requirements.memory == 512
-    assert requirements.virtualCores == RM_MAX_CORES
+    assert requirements.virtualCores == MockAppState.RM_MAX_CORES
   }
   
   @Test

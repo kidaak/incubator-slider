@@ -19,24 +19,43 @@
 package org.apache.slider.client;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
+import com.google.common.io.Files;
 
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang.ArrayUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
+<<<<<<< HEAD
 import org.apache.hadoop.fs.FileSystem;
+=======
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.LocatedFileStatus;
+>>>>>>> refs/remotes/apache/develop
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathNotFoundException;
+import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.registry.client.api.RegistryConstants;
+import org.apache.hadoop.registry.client.api.RegistryOperations;
 import org.apache.hadoop.registry.client.binding.RegistryPathUtils;
+import org.apache.hadoop.registry.client.binding.RegistryUtils;
+import org.apache.hadoop.registry.client.exceptions.NoRecordException;
+import org.apache.hadoop.registry.client.types.Endpoint;
 import org.apache.hadoop.registry.client.types.RegistryPathStatus;
+import org.apache.hadoop.registry.client.types.ServiceRecord;
+import org.apache.hadoop.registry.client.types.yarn.YarnRegistryAttributes;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.alias.CredentialProvider;
 import org.apache.hadoop.security.alias.CredentialProviderFactory;
+<<<<<<< HEAD
+=======
+import org.apache.hadoop.util.Shell;
+>>>>>>> refs/remotes/apache/develop
 import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationReport;
@@ -49,45 +68,47 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException;
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException;
 import org.apache.hadoop.yarn.exceptions.YarnException;
-import org.apache.hadoop.registry.client.api.RegistryOperations;
-
-import static org.apache.hadoop.registry.client.binding.RegistryUtils.*;
-
-import org.apache.hadoop.registry.client.binding.RegistryUtils;
-import org.apache.hadoop.registry.client.exceptions.NoRecordException;
-import org.apache.hadoop.registry.client.types.Endpoint;
-import org.apache.hadoop.registry.client.types.ServiceRecord;
-import org.apache.hadoop.registry.client.types.yarn.YarnRegistryAttributes;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.slider.api.ClusterDescription;
 import org.apache.slider.api.ClusterNode;
-import org.apache.slider.api.InternalKeys;
-import org.apache.slider.api.OptionKeys;
-import org.apache.slider.api.ResourceKeys;
+import org.apache.slider.api.SliderApplicationApi;
 import org.apache.slider.api.SliderClusterProtocol;
+import org.apache.slider.api.StateValues;
 import org.apache.slider.api.proto.Messages;
+import org.apache.slider.api.types.ContainerInformation;
+import org.apache.slider.api.types.NodeInformationList;
+import org.apache.slider.api.types.SliderInstanceDescription;
+import org.apache.slider.client.ipc.SliderApplicationIpcClient;
+import org.apache.slider.client.ipc.SliderClusterOperations;
 import org.apache.slider.common.Constants;
 import org.apache.slider.common.SliderExitCodes;
 import org.apache.slider.common.SliderKeys;
 import org.apache.slider.common.SliderXmlConfKeys;
 import org.apache.slider.common.params.AbstractActionArgs;
 import org.apache.slider.common.params.AbstractClusterBuildingActionArgs;
-import org.apache.slider.common.params.ActionDiagnosticArgs;
-import org.apache.slider.common.params.ActionExistsArgs;
-import org.apache.slider.common.params.ActionInstallKeytabArgs;
-import org.apache.slider.common.params.ActionInstallPackageArgs;
 import org.apache.slider.common.params.ActionAMSuicideArgs;
+import org.apache.slider.common.params.ActionClientArgs;
 import org.apache.slider.common.params.ActionCreateArgs;
+import org.apache.slider.common.params.ActionDependencyArgs;
+import org.apache.slider.common.params.ActionDestroyArgs;
+import org.apache.slider.common.params.ActionDiagnosticArgs;
 import org.apache.slider.common.params.ActionEchoArgs;
+import org.apache.slider.common.params.ActionExistsArgs;
 import org.apache.slider.common.params.ActionFlexArgs;
 import org.apache.slider.common.params.ActionFreezeArgs;
+import org.apache.slider.common.params.ActionInstallKeytabArgs;
+import org.apache.slider.common.params.ActionInstallPackageArgs;
+import org.apache.slider.common.params.ActionKeytabArgs;
 import org.apache.slider.common.params.ActionKillContainerArgs;
 import org.apache.slider.common.params.ActionListArgs;
 import org.apache.slider.common.params.ActionLookupArgs;
+import org.apache.slider.common.params.ActionNodesArgs;
+import org.apache.slider.common.params.ActionPackageArgs;
 import org.apache.slider.common.params.ActionRegistryArgs;
 import org.apache.slider.common.params.ActionResolveArgs;
 import org.apache.slider.common.params.ActionStatusArgs;
 import org.apache.slider.common.params.ActionThawArgs;
+import org.apache.slider.common.params.ActionUpgradeArgs;
 import org.apache.slider.common.params.Arguments;
 import org.apache.slider.common.params.ClientArgs;
 import org.apache.slider.common.params.CommonArgs;
@@ -113,17 +134,19 @@ import org.apache.slider.core.exceptions.NoSuchNodeException;
 import org.apache.slider.core.exceptions.NotFoundException;
 import org.apache.slider.core.exceptions.SliderException;
 import org.apache.slider.core.exceptions.UnknownApplicationInstanceException;
+import org.apache.slider.core.exceptions.UsageException;
 import org.apache.slider.core.exceptions.WaitTimeoutException;
 import org.apache.slider.core.launch.AppMasterLauncher;
 import org.apache.slider.core.launch.ClasspathConstructor;
-import org.apache.slider.core.launch.CommandLineBuilder;
 import org.apache.slider.core.launch.JavaCommandLineBuilder;
 import org.apache.slider.core.launch.LaunchedApplication;
 import org.apache.slider.core.launch.RunningApplication;
 import org.apache.slider.core.launch.SerializedApplicationReport;
 import org.apache.slider.core.main.RunService;
+import org.apache.slider.core.persist.AppDefinitionPersister;
 import org.apache.slider.core.persist.ApplicationReportSerDeser;
 import org.apache.slider.core.persist.ConfPersister;
+import org.apache.slider.core.persist.JsonSerDeser;
 import org.apache.slider.core.persist.LockAcquireFailedException;
 import org.apache.slider.core.registry.SliderRegistryUtils;
 import org.apache.slider.core.registry.YarnAppListClient;
@@ -144,37 +167,54 @@ import org.apache.slider.providers.agent.AgentKeys;
 import org.apache.slider.providers.slideram.SliderAMClientProvider;
 import org.apache.slider.server.appmaster.SliderAppMaster;
 import org.apache.slider.server.appmaster.rpc.RpcBinder;
+import org.apache.slider.server.services.security.SecurityStore;
 import org.apache.slider.server.services.utility.AbstractSliderLaunchedService;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs;
+import org.apache.zookeeper.data.ACL;
 import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.InterruptedIOException;
 import java.io.PrintStream;
 import java.io.StringWriter;
 import java.io.Writer;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URISyntaxException;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.apache.hadoop.registry.client.binding.RegistryUtils.*;
+import static org.apache.slider.api.InternalKeys.*;
+import static org.apache.slider.api.OptionKeys.*;
+import static org.apache.slider.api.ResourceKeys.*;
 import static org.apache.slider.common.params.SliderActions.*;
+import static org.apache.slider.common.tools.SliderUtils.*;
+
 
 /**
  * Client service for Slider
@@ -183,13 +223,34 @@ import static org.apache.slider.common.params.SliderActions.*;
 public class SliderClient extends AbstractSliderLaunchedService implements RunService,
     SliderExitCodes, SliderKeys, ErrorStrings, SliderClientAPI {
   private static final Logger log = LoggerFactory.getLogger(SliderClient.class);
+  public static final String E_MUST_BE_A_VALID_JSON_FILE
+      = "Invalid configuration. Must be a valid json file.";
+  public static final String E_INVALID_INSTALL_LOCATION
+      = "A valid install location must be provided for the client.";
+  public static final String E_UNABLE_TO_READ_SUPPLIED_PACKAGE_FILE
+      = "Unable to read supplied package file";
+  public static final String E_INVALID_APPLICATION_PACKAGE_LOCATION
+      = "A valid application package location required.";
+  public static final String E_INVALID_INSTALL_PATH = "Install path is not a valid directory";
+  public static final String E_INSTALL_PATH_DOES_NOT_EXIST = "Install path does not exist";
+  public static final String E_INVALID_APPLICATION_TYPE_NAME
+      = "A valid application type name is required (e.g. HBASE).";
+  public static final String E_USE_REPLACEPKG_TO_OVERWRITE = "Use --replacepkg to overwrite.";
+  public static final String E_PACKAGE_DOES_NOT_EXIST = "Package does not exist";
+  public static final String E_NO_ZOOKEEPER_QUORUM = "No Zookeeper quorum defined";
+  public static final String E_NO_RESOURCE_MANAGER = "No valid Resource Manager address provided";
+  public static final String E_PACKAGE_EXISTS = "Package exists";
+  private static PrintStream clientOutputStream = System.out;
+
+  // value should not be changed without updating string find in slider.py
+  private static final String PASSWORD_PROMPT = "Enter password for";
 
   private ClientArgs serviceArgs;
   public ApplicationId applicationId;
   
   private String deployedClusterName;
   /**
-   * Cluster opaerations against the deployed cluster -will be null
+   * Cluster operations against the deployed cluster -will be null
    * if no bonding has yet taken place
    */
   private SliderClusterOperations sliderClusterOperations;
@@ -200,12 +261,13 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
    * Yarn client service
    */
   private SliderYarnClientImpl yarnClient;
-  private YarnAppListClient YarnAppListClient;
+  private YarnAppListClient yarnAppListClient;
   private AggregateConf launchedInstanceDefinition;
 
   /**
    * The YARN registry service
    */
+  @SuppressWarnings("FieldAccessedSynchronizedAndUnsynchronized")
   private RegistryOperations registryOperations;
 
   /**
@@ -232,21 +294,23 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     config = super.bindArgs(config, args);
     serviceArgs = new ClientArgs(args);
     serviceArgs.parse();
+    // add the slider XML config
+    ConfigHelper.injectSliderXMLResource();
     // yarn-ify
     YarnConfiguration yarnConfiguration = new YarnConfiguration(config);
-    return SliderUtils.patchConfiguration(yarnConfiguration);
+    return patchConfiguration(yarnConfiguration);
   }
 
   @Override
   protected void serviceInit(Configuration conf) throws Exception {
-    Configuration clientConf = SliderUtils.loadClientConfigurationResource();
-    ConfigHelper.mergeConfigurations(conf, clientConf, CLIENT_RESOURCE, true);
+    Configuration clientConf = loadSliderClientXML();
+    ConfigHelper.mergeConfigurations(conf, clientConf, SLIDER_CLIENT_XML, true);
     serviceArgs.applyDefinitions(conf);
     serviceArgs.applyFileSystemBinding(conf);
     // init security with our conf
-    if (SliderUtils.isHadoopClusterSecure(conf)) {
-      SliderUtils.forceLogin();
-      SliderUtils.initProcessSecurity(conf);
+    if (isHadoopClusterSecure(conf)) {
+      forceLogin();
+      initProcessSecurity(conf);
     }
     AbstractActionArgs coreAction = serviceArgs.getCoreAction();
     if (coreAction.getHadoopServicesRequired()) {
@@ -254,87 +318,6 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     }
     super.serviceInit(conf);
   }
-
-  /**
-   * this is where the work is done.
-   * @return the exit code
-   * @throws Throwable anything that went wrong
-   */
-/* JDK7
-
-  @Override
-  public int runService() throws Throwable {
-
-    // choose the action
-    String action = serviceArgs.getAction();
-    int exitCode = EXIT_SUCCESS;
-    String clusterName = serviceArgs.getClusterName();
-    // actions
-    switch (action) {
-      case ACTION_BUILD:
-        exitCode = actionBuild(clusterName, serviceArgs.getActionBuildArgs());
-        break;
-      case ACTION_UPDATE:
-        exitCode = actionUpdate(clusterName, serviceArgs.getActionUpdateArgs());
-        break;
-      case ACTION_CREATE:
-        exitCode = actionCreate(clusterName, serviceArgs.getActionCreateArgs());
-        break;
-      case ACTION_FREEZE:
-        exitCode = actionFreeze(clusterName, serviceArgs.getActionFreezeArgs());
-        break;
-      case ACTION_THAW:
-        exitCode = actionThaw(clusterName, serviceArgs.getActionThawArgs());
-        break;
-      case ACTION_DESTROY:
-        exitCode = actionDestroy(clusterName);
-        break;
-      case ACTION_EXISTS:
-        exitCode = actionExists(clusterName,
-            serviceArgs.getActionExistsArgs().live);
-        break;
-      case ACTION_FLEX:
-        exitCode = actionFlex(clusterName, serviceArgs.getActionFlexArgs());
-        break;
-      case ACTION_GETCONF:
-        exitCode =
-            actionGetConf(clusterName, serviceArgs.getActionGetConfArgs());
-        break;
-      case ACTION_HELP:
-      case ACTION_USAGE:
-        log.info(serviceArgs.usage());
-        break;
-      case ACTION_KILL_CONTAINER:
-        exitCode = actionKillContainer(clusterName,
-            serviceArgs.getActionKillContainerArgs());
-        break;
-      case ACTION_AM_SUICIDE:
-        exitCode = actionAmSuicide(clusterName,
-            serviceArgs.getActionAMSuicideArgs());
-        break;
-      case ACTION_LIST:
-        exitCode = actionList(clusterName, serviceArgs.getActionListArgs());
-        break;
-      case ACTION_REGISTRY:
-        exitCode = actionRegistry(
-            serviceArgs.getActionRegistryArgs());
-        break;
-      case ACTION_STATUS:
-        exitCode = actionStatus(clusterName,
-            serviceArgs.getActionStatusArgs());
-        break;
-      case ACTION_VERSION:
-        exitCode = actionVersion();
-        break;
-      default:
-        throw new SliderException(EXIT_UNIMPLEMENTED,
-            "Unimplemented: " + action);
-    }
-
-    return exitCode;
-  }
-
-*/
 
   /**
    * Launched service execution. This runs {@link #exec()}
@@ -346,9 +329,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
   public int runService() throws Throwable {
     try {
       return exec();
-    } catch (FileNotFoundException nfe) {
-      throw new NotFoundException(nfe, nfe.toString());
-    } catch (PathNotFoundException nfe) {
+    } catch (FileNotFoundException | PathNotFoundException nfe) {
       throw new NotFoundException(nfe, nfe.toString());
     }
   }
@@ -362,67 +343,131 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
 
     // choose the action
     String action = serviceArgs.getAction();
+    if (isUnset(action)) {
+      throw new SliderException(EXIT_USAGE, serviceArgs.usage());
+    }
 
     int exitCode = EXIT_SUCCESS;
     String clusterName = serviceArgs.getClusterName();
     // actions
-    if (ACTION_INSTALL_PACKAGE.equals(action)) {
-      exitCode = actionInstallPkg(serviceArgs.getActionInstallPackageArgs());
-    } else if (ACTION_INSTALL_KEYTAB.equals(action)) {
-      exitCode = actionInstallKeytab(serviceArgs.getActionInstallKeytabArgs());
-    } else if (ACTION_BUILD.equals(action)) {
-      exitCode = actionBuild(clusterName, serviceArgs.getActionBuildArgs());
-    } else if (ACTION_CREATE.equals(action)) {
-      exitCode = actionCreate(clusterName, serviceArgs.getActionCreateArgs());
-    } else if (ACTION_FREEZE.equals(action)) {
-      exitCode = actionFreeze(clusterName,
-            serviceArgs.getActionFreezeArgs());
-    } else if (ACTION_THAW.equals(action)) {
-      exitCode = actionThaw(clusterName, serviceArgs.getActionThawArgs());
-    } else if (ACTION_DESTROY.equals(action)) {
-      exitCode = actionDestroy(clusterName);
-    } else if (ACTION_DIAGNOSTICS.equals(action)) {
-      exitCode = actionDiagnostic(serviceArgs.getActionDiagnosticArgs());
-    } else if (ACTION_EXISTS.equals(action)) {
-      exitCode = actionExists(clusterName,
-          serviceArgs.getActionExistsArgs());
-    } else if (ACTION_FLEX.equals(action)) {
-      exitCode = actionFlex(clusterName, serviceArgs.getActionFlexArgs());
-    } else if (ACTION_HELP.equals(action)) {
-      log.info(serviceArgs.usage());
-    } else if (ACTION_KILL_CONTAINER.equals(action)) {
-      exitCode = actionKillContainer(clusterName,
-          serviceArgs.getActionKillContainerArgs());
-    } else if (ACTION_AM_SUICIDE.equals(action)) {
-      exitCode = actionAmSuicide(clusterName,
-          serviceArgs.getActionAMSuicideArgs());
-    } else if (ACTION_LIST.equals(action)) {
-      exitCode = actionList(clusterName, serviceArgs.getActionListArgs());
-    } else if (ACTION_LOOKUP.equals(action)) {
-      exitCode = actionLookup(serviceArgs.getActionLookupArgs());
-    } else if (ACTION_REGISTRY.equals(action)) {
-      exitCode = actionRegistry(serviceArgs.getActionRegistryArgs());
-    } else if (ACTION_RESOLVE.equals(action)) {
-      exitCode = actionResolve(serviceArgs.getActionResolveArgs());
-    } else if (ACTION_STATUS.equals(action)) {
-      exitCode = actionStatus(clusterName,
-          serviceArgs.getActionStatusArgs());
-    } else if (ACTION_UPDATE.equals(action)) {
-      exitCode = actionUpdate(clusterName, serviceArgs.getActionUpdateArgs());
-    } else if (ACTION_VERSION.equals(action)) {
-      exitCode = actionVersion();
-    } else if (SliderUtils.isUnset(action)) {
-        throw new SliderException(EXIT_USAGE,
-                serviceArgs.usage());
-    } else {
-      throw new SliderException(EXIT_UNIMPLEMENTED,
-          "Unimplemented: " + action);
-    }
 
+    switch (action) {
+      case ACTION_AM_SUICIDE:
+        exitCode = actionAmSuicide(clusterName,
+            serviceArgs.getActionAMSuicideArgs());
+        break;
+      
+      case ACTION_BUILD:
+        exitCode = actionBuild(clusterName, serviceArgs.getActionBuildArgs());
+        break;
+      
+      case ACTION_CLIENT:
+        exitCode = actionClient(serviceArgs.getActionClientArgs());
+        break;
+
+      case ACTION_CREATE:
+        exitCode = actionCreate(clusterName, serviceArgs.getActionCreateArgs());
+        break;
+
+      case ACTION_DEPENDENCY:
+        exitCode = actionDependency(serviceArgs.getActionDependencyArgs());
+        break;
+
+      case ACTION_DESTROY:
+        exitCode = actionDestroy(clusterName, serviceArgs.getActionDestroyArgs());
+        break;
+
+      case ACTION_DIAGNOSTICS:
+        exitCode = actionDiagnostic(serviceArgs.getActionDiagnosticArgs());
+        break;
+      
+      case ACTION_EXISTS:
+        exitCode = actionExists(clusterName,
+            serviceArgs.getActionExistsArgs());
+        break;
+      
+      case ACTION_FLEX:
+        exitCode = actionFlex(clusterName, serviceArgs.getActionFlexArgs());
+        break;
+      
+      case ACTION_FREEZE:
+        exitCode = actionFreeze(clusterName, serviceArgs.getActionFreezeArgs());
+        break;
+      
+      case ACTION_HELP:
+        log.info(serviceArgs.usage());
+        break;
+      
+      case ACTION_KILL_CONTAINER:
+        exitCode = actionKillContainer(clusterName,
+            serviceArgs.getActionKillContainerArgs());
+        break;
+      
+      case ACTION_INSTALL_KEYTAB:
+        exitCode = actionInstallKeytab(serviceArgs.getActionInstallKeytabArgs());
+        break;
+      
+      case ACTION_INSTALL_PACKAGE:
+        exitCode = actionInstallPkg(serviceArgs.getActionInstallPackageArgs());
+        break;
+      
+      case ACTION_KEYTAB:
+        exitCode = actionKeytab(serviceArgs.getActionKeytabArgs());
+        break;
+
+      case ACTION_LIST:
+        exitCode = actionList(clusterName, serviceArgs.getActionListArgs());
+        break;
+
+      case ACTION_LOOKUP:
+        exitCode = actionLookup(serviceArgs.getActionLookupArgs());
+        break;
+
+      case ACTION_NODES:
+        exitCode = actionNodes("", serviceArgs.getActionNodesArgs());
+        break;
+
+      case ACTION_PACKAGE:
+        exitCode = actionPackage(serviceArgs.getActionPackageArgs());
+        break;
+
+      case ACTION_REGISTRY:
+        exitCode = actionRegistry(serviceArgs.getActionRegistryArgs());
+        break;
+      
+      case ACTION_RESOLVE:
+        exitCode = actionResolve(serviceArgs.getActionResolveArgs());
+        break;
+      
+      case ACTION_STATUS:
+        exitCode = actionStatus(clusterName, serviceArgs.getActionStatusArgs());
+        break;
+
+      case ACTION_THAW:
+        exitCode = actionThaw(clusterName, serviceArgs.getActionThawArgs());
+        break;
+
+      case ACTION_UPDATE:
+        exitCode = actionUpdate(clusterName, serviceArgs.getActionUpdateArgs());
+        break;
+
+      case ACTION_UPGRADE:
+        exitCode = actionUpgrade(clusterName, serviceArgs.getActionUpgradeArgs());
+        break;
+
+      case ACTION_VERSION:
+        exitCode = actionVersion();
+        break;
+      
+      default:
+        throw new SliderException(EXIT_UNIMPLEMENTED,
+            "Unimplemented: " + action);
+    }
+   
     return exitCode;
   }
 
-/**
+  /**
    * Perform everything needed to init the hadoop binding.
    * This assumes that the service is already  in inited or started state
    * @throws IOException
@@ -430,7 +475,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
    */
   protected void initHadoopBinding() throws IOException, SliderException {
     // validate the client
-    SliderUtils.validateSliderClientEnvironment(null);
+    validateSliderClientEnvironment(null);
     //create the YARN client
     yarnClient = new SliderYarnClientImpl();
     yarnClient.init(getConfig());
@@ -438,10 +483,10 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       yarnClient.start();
     }
     addService(yarnClient);
-    YarnAppListClient =
+    yarnAppListClient =
         new YarnAppListClient(yarnClient, getUsername(), getConfig());
     // create the filesystem
-    sliderFileSystem = new SliderFileSystem(getConfig());    
+    sliderFileSystem = new SliderFileSystem(getConfig());
   }
 
   /**
@@ -463,16 +508,11 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
         client.deleteRecursive(zkPath);
         return true;
       }
-    } catch (InterruptedException ignored) {
-      e = ignored;
-    } catch (KeeperException ignored) {
-      e = ignored;
-    } catch (BadConfigException ignored) {
-      e = ignored;
+    } catch (InterruptedException | BadConfigException | KeeperException ex) {
+      e = ex;
     }
     if (e != null) {
-      log.debug("Unable to recursively delete zk node {}", zkPath);
-      log.debug("Reason: ", e);
+      log.warn("Unable to recursively delete zk node {}", zkPath, e);
     }
 
     return false;
@@ -480,29 +520,65 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
 
   /**
    * Create the zookeeper node associated with the calling user and the cluster
+   *
+   * @param clusterName slider application name
+   * @param nameOnly should the name only be created (i.e. don't create ZK node)
+   * @return the path, using the policy implemented in
+   *   {@link ZKIntegration#mkClusterPath(String, String)}
+   * @throws YarnException
+   * @throws IOException
    */
   @VisibleForTesting
   public String createZookeeperNode(String clusterName, Boolean nameOnly) throws YarnException, IOException {
+    try {
+      return createZookeeperNodeInner(clusterName, nameOnly);
+    } catch (KeeperException.NodeExistsException e) {
+      return null;
+    } catch (KeeperException e) {
+      return null;
+    } catch (InterruptedException e) {
+      throw new InterruptedIOException(e.toString());
+    }
+  }
+
+  /**
+   * Create the zookeeper node associated with the calling user and the cluster
+   * -throwing exceptions on any failure
+   * @param clusterName cluster name
+   * @param nameOnly create the path, not the node
+   * @return the path, using the policy implemented in
+   *   {@link ZKIntegration#mkClusterPath(String, String)}
+   * @throws YarnException
+   * @throws IOException
+   * @throws KeeperException
+   * @throws InterruptedException
+   */
+  @VisibleForTesting
+  public String createZookeeperNodeInner(String clusterName, Boolean nameOnly)
+      throws YarnException, IOException, KeeperException, InterruptedException {
     String user = getUsername();
     String zkPath = ZKIntegration.mkClusterPath(user, clusterName);
     if (nameOnly) {
       return zkPath;
     }
-    Configuration config = getConfig();
     ZKIntegration client = getZkClient(clusterName, user);
     if (client != null) {
-      try {
-        client.createPath(zkPath, "", ZooDefs.Ids.OPEN_ACL_UNSAFE,
-                          CreateMode.PERSISTENT);
-        return zkPath;
-      } catch (InterruptedException e) {
-        log.warn("Unable to create default zk node {}", zkPath, e);
-      } catch (KeeperException e) {
-        log.warn("Unable to create default zk node {}", zkPath, e);
+      // set up the permissions. This must be done differently on a secure cluster from an insecure
+      // one
+      List<ACL> zkperms = new ArrayList<>();
+      if (UserGroupInformation.isSecurityEnabled()) {
+        zkperms.add(new ACL(ZooDefs.Perms.ALL, ZooDefs.Ids.AUTH_IDS));
+        zkperms.add(new ACL(ZooDefs.Perms.READ, ZooDefs.Ids.ANYONE_ID_UNSAFE));
+      } else {
+        zkperms.add(new ACL(ZooDefs.Perms.ALL, ZooDefs.Ids.ANYONE_ID_UNSAFE));
       }
+      client.createPath(zkPath, "",
+          zkperms,
+          CreateMode.PERSISTENT);
+      return zkPath;
+    } else {
+      return null;
     }
-
-    return null;
   }
 
   /**
@@ -513,7 +589,8 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     ZKIntegration client = null;
     try {
       BlockingZKWatcher watcher = new BlockingZKWatcher();
-      client = ZKIntegration.newInstance(registryQuorum, user, clusterName, true, false, watcher);
+      client = ZKIntegration.newInstance(registryQuorum, user, clusterName, true, false, watcher,
+          ZKIntegration.SESSION_TIMEOUT);
       client.init();
       watcher.waitForZKConnection(2 * 1000);
     } catch (InterruptedException e) {
@@ -525,14 +602,28 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     return client;
   }
 
+  /**
+   * Keep this signature for backward compatibility with
+   * force=true by default.
+   */
   @Override
   public int actionDestroy(String clustername) throws YarnException,
                                                       IOException {
+    ActionDestroyArgs destroyArgs = new ActionDestroyArgs();
+    destroyArgs.force = true;
+    return actionDestroy(clustername, destroyArgs);
+  }
+
+  @Override
+  public int actionDestroy(String clustername,
+      ActionDestroyArgs destroyArgs) throws YarnException, IOException {
     // verify that a live cluster isn't there
-    SliderUtils.validateClusterName(clustername);
+    validateClusterName(clustername);
     //no=op, it is now mandatory. 
     verifyBindingsDefined();
     verifyNoLiveClusters(clustername, "Destroy");
+    boolean forceDestroy = destroyArgs.force;
+    log.debug("actionDestroy({}, force={})", clustername, forceDestroy);
 
     // create the directory path
     Path clusterDirectory = sliderFileSystem.buildClusterDirPath(clustername);
@@ -541,9 +632,18 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     boolean exists = fs.exists(clusterDirectory);
     if (exists) {
       log.debug("Application Instance {} found at {}: destroying", clustername, clusterDirectory);
+<<<<<<< HEAD
       boolean deleted =
           fs.delete(clusterDirectory, true);
       if (!deleted) {
+=======
+      if (!forceDestroy) {
+        // fail the command if --force is not explicitly specified
+        throw new UsageException("Destroy will permanently delete directories and registries. "
+            + "Reissue this command with the --force option if you want to proceed.");
+      }
+      if (!fs.delete(clusterDirectory, true)) {
+>>>>>>> refs/remotes/apache/develop
         log.warn("Filesystem returned false from delete() operation");
       }
 
@@ -626,6 +726,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     return startCluster(clustername, createArgs);
   }
 
+<<<<<<< HEAD
   private void checkForCredentials(Configuration conf,
       ConfTree tree) throws IOException {
     if (tree.credentials == null || tree.credentials.size()==0) {
@@ -649,8 +750,250 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
           throw new IOException("Specified credentials have not been " +
               "initialized in provider " + provider + ": " + alias);
         }
+=======
+  @Override
+  public int actionUpgrade(String clustername, ActionUpgradeArgs upgradeArgs)
+      throws YarnException, IOException {
+    File template = upgradeArgs.template;
+    File resources = upgradeArgs.resources;
+    List<String> containers = upgradeArgs.containers;
+    List<String> components = upgradeArgs.components;
+
+    // For upgrade spec, let's be little more strict with validation. If either
+    // --template or --resources is specified, then both needs to be specified.
+    // Otherwise the internal app config and resources states of the app will be
+    // unwantedly modified and the change will take effect to the running app
+    // immediately.
+    require(!(template != null && resources == null),
+          "Option %s must be specified with option %s",
+          Arguments.ARG_RESOURCES, Arguments.ARG_TEMPLATE);
+
+    require(!(resources != null && template == null),
+          "Option %s must be specified with option %s",
+          Arguments.ARG_TEMPLATE, Arguments.ARG_RESOURCES);
+
+    // For upgrade spec, both --template and --resources should be specified
+    // and neither of --containers or --components should be used
+    if (template != null && resources != null) {
+      require(CollectionUtils.isEmpty(containers),
+            "Option %s cannot be specified with %s or %s",
+            Arguments.ARG_CONTAINERS, Arguments.ARG_TEMPLATE,
+            Arguments.ARG_RESOURCES);
+      require(CollectionUtils.isEmpty(components),
+              "Option %s cannot be specified with %s or %s",
+              Arguments.ARG_COMPONENTS, Arguments.ARG_TEMPLATE,
+              Arguments.ARG_RESOURCES);
+
+      // not an error to try to upgrade a stopped cluster, just return success
+      // code, appropriate log messages have already been dumped
+      if (!isAppInRunningState(clustername)) {
+        return EXIT_SUCCESS;
+      }
+
+      // Now initiate the upgrade spec flow
+      buildInstanceDefinition(clustername, upgradeArgs, true, true, true);
+      SliderClusterOperations clusterOperations = createClusterOperations(clustername);
+      clusterOperations.amSuicide("AM restarted for application upgrade", 1, 1000);
+      return EXIT_SUCCESS;
+    }
+
+    // Since neither --template or --resources were specified, it is upgrade
+    // containers flow. Here any one or both of --containers and --components
+    // can be specified. If a container is specified with --containers option
+    // and also belongs to a component type specified with --components, it will
+    // be upgraded only once.
+    return actionUpgradeContainers(clustername, upgradeArgs);
+  }
+
+  private int actionUpgradeContainers(String clustername,
+      ActionUpgradeArgs upgradeArgs) throws YarnException, IOException {
+    verifyBindingsDefined();
+    validateClusterName(clustername);
+    int waittime = upgradeArgs.getWaittime(); // ignored for now
+    String text = "Upgrade containers";
+    log.debug("actionUpgradeContainers({}, reason={}, wait={})", clustername,
+        text, waittime);
+
+    // not an error to try to upgrade a stopped cluster, just return success
+    // code, appropriate log messages have already been dumped
+    if (!isAppInRunningState(clustername)) {
+      return EXIT_SUCCESS;
+    }
+
+    // Create sets of containers and components to get rid of duplicates and
+    // for quick lookup during checks below
+    Set<String> containers = new HashSet<>();
+    if (upgradeArgs.containers != null) {
+      containers.addAll(new ArrayList<>(upgradeArgs.containers));
+    }
+    Set<String> components = new HashSet<>();
+    if (upgradeArgs.components != null) {
+      components.addAll(new ArrayList<>(upgradeArgs.components));
+    }
+
+    // check validity of component names and running containers here
+    List<ContainerInformation> liveContainers = getContainers(clustername);
+    Set<String> validContainers = new HashSet<>();
+    Set<String> validComponents = new HashSet<>();
+    for (ContainerInformation liveContainer : liveContainers) {
+      boolean allContainersAndComponentsAccountedFor = true;
+      if (CollectionUtils.isNotEmpty(containers)) {
+        if (containers.contains(liveContainer.containerId)) {
+          containers.remove(liveContainer.containerId);
+          validContainers.add(liveContainer.containerId);
+        }
+        allContainersAndComponentsAccountedFor = false;
+      }
+      if (CollectionUtils.isNotEmpty(components)) {
+        if (components.contains(liveContainer.component)) {
+          components.remove(liveContainer.component);
+          validComponents.add(liveContainer.component);
+        }
+        allContainersAndComponentsAccountedFor = false;
+      }
+      if (allContainersAndComponentsAccountedFor) {
+        break;
       }
     }
+
+    // If any item remains in containers or components then they are invalid.
+    // Log warning for them and proceed.
+    if (CollectionUtils.isNotEmpty(containers)) {
+      log.warn("Invalid set of containers provided {}", containers);
+    }
+    if (CollectionUtils.isNotEmpty(components)) {
+      log.warn("Invalid set of components provided {}", components);
+    }
+
+    // If not a single valid container or component is specified do not proceed
+    if (CollectionUtils.isEmpty(validContainers)
+        && CollectionUtils.isEmpty(validComponents)) {
+      log.error("Not a single valid container or component specified. Nothing to do.");
+      return EXIT_NOT_FOUND;
+    }
+
+    SliderClusterProtocol appMaster = connect(findInstance(clustername));
+    Messages.UpgradeContainersRequestProto r =
+      Messages.UpgradeContainersRequestProto
+              .newBuilder()
+              .setMessage(text)
+              .addAllContainer(validContainers)
+              .addAllComponent(validComponents)
+              .build();
+    appMaster.upgradeContainers(r);
+    log.info("Cluster upgrade issued for -");
+    if (CollectionUtils.isNotEmpty(validContainers)) {
+      log.info(" Containers (total {}): {}", validContainers.size(),
+          validContainers);
+    }
+    if (CollectionUtils.isNotEmpty(validComponents)) {
+      log.info(" Components (total {}): {}", validComponents.size(),
+          validComponents);
+    }
+
+    return EXIT_SUCCESS;
+  }
+
+  // returns true if and only if app is in RUNNING state
+  private boolean isAppInRunningState(String clustername) throws YarnException,
+      IOException {
+    // is this actually a known cluster?
+    sliderFileSystem.locateInstanceDefinition(clustername);
+    ApplicationReport app = findInstance(clustername);
+    if (app == null) {
+      // exit early
+      log.info("Cluster {} not running", clustername);
+      return false;
+    }
+    log.debug("App to upgrade was found: {}:\n{}", clustername,
+        new OnDemandReportStringifier(app));
+    if (app.getYarnApplicationState().ordinal() >= YarnApplicationState.FINISHED.ordinal()) {
+      log.info("Cluster {} is in a terminated state {}. Use command '{}' instead.",
+          clustername, app.getYarnApplicationState(), ACTION_UPDATE);
+      return false;
+    }
+
+    // IPC request to upgrade containers is possible if the app is running.
+    if (app.getYarnApplicationState().ordinal() < YarnApplicationState.RUNNING
+        .ordinal()) {
+      log.info("Cluster {} is in a pre-running state {}. To upgrade it needs "
+          + "to be RUNNING.", clustername, app.getYarnApplicationState());
+      return false;
+    }
+
+    return true;
+  }
+
+  private static void checkForCredentials(Configuration conf,
+      ConfTree tree) throws IOException {
+    if (tree.credentials == null || tree.credentials.isEmpty()) {
+      log.info("No credentials requested");
+      return;
+    }
+
+    BufferedReader br = null;
+    try {
+      for (Entry<String, List<String>> cred : tree.credentials.entrySet()) {
+        String provider = cred.getKey();
+        List<String> aliases = cred.getValue();
+        if (aliases == null || aliases.isEmpty()) {
+          continue;
+        }
+        Configuration c = new Configuration(conf);
+        c.set(CredentialProviderFactory.CREDENTIAL_PROVIDER_PATH, provider);
+        CredentialProvider credentialProvider = CredentialProviderFactory.getProviders(c).get(0);
+        Set<String> existingAliases = new HashSet<>(credentialProvider.getAliases());
+        for (String alias : aliases) {
+          if (existingAliases.contains(alias.toLowerCase(Locale.ENGLISH))) {
+            log.info("Credentials for " + alias + " found in " + provider);
+          } else {
+            if (br == null) {
+              br = new BufferedReader(new InputStreamReader(System.in));
+            }
+            char[] pass = readPassword(alias, br);
+            credentialProvider.createCredentialEntry(alias, pass);
+            credentialProvider.flush();
+            Arrays.fill(pass, ' ');
+          }
+        }
+>>>>>>> refs/remotes/apache/develop
+      }
+    } finally {
+      org.apache.hadoop.io.IOUtils.closeStream(br);
+    }
+  }
+
+  private static char[] readOnePassword(String alias) throws IOException {
+    try(BufferedReader br = new BufferedReader(new InputStreamReader(System.in))) {
+      return readPassword(alias, br);
+    }
+  }
+
+  // using a normal reader instead of a secure one,
+  // because stdin is not hooked up to the command line
+  private static char[] readPassword(String alias, BufferedReader br)
+      throws IOException {
+    char[] cred = null;
+
+    boolean noMatch;
+    do {
+      log.info(String.format("%s %s: ", PASSWORD_PROMPT, alias));
+      char[] newPassword1 = br.readLine().toCharArray();
+      log.info(String.format("%s %s again: ", PASSWORD_PROMPT, alias));
+      char[] newPassword2 = br.readLine().toCharArray();
+      noMatch = !Arrays.equals(newPassword1, newPassword2);
+      if (noMatch) {
+        if (newPassword1 != null) Arrays.fill(newPassword1, ' ');
+        log.info(String.format("Passwords don't match. Try again."));
+      } else {
+        cred = newPassword1;
+      }
+      if (newPassword2 != null) Arrays.fill(newPassword2, ' ');
+    } while (noMatch);
+    if (cred == null)
+      throw new IOException("Could not read credentials for " + alias +
+          " from stdin");
+    return cred;
   }
 
   @Override
@@ -664,85 +1007,448 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
   }
 
   @Override
-  public int actionInstallKeytab(ActionInstallKeytabArgs installKeytabInfo)
+  public int actionKeytab(ActionKeytabArgs keytabInfo)
       throws YarnException, IOException {
+    if (keytabInfo.install) {
+      return actionInstallKeytab(keytabInfo);
+    } else if (keytabInfo.delete) {
+      return actionDeleteKeytab(keytabInfo);
+    } else if (keytabInfo.list) {
+      return actionListKeytab(keytabInfo);
+    } else {
+      throw new BadCommandArgumentsException(
+          "Keytab option specified not found.\n"
+          + CommonArgs.usage(serviceArgs, ACTION_KEYTAB));
+    }
+  }
 
-    Path srcFile = null;
-    if (StringUtils.isEmpty(installKeytabInfo.folder)) {
+  private int actionListKeytab(ActionKeytabArgs keytabInfo) throws IOException {
+    String folder = keytabInfo.folder != null ? keytabInfo.folder : StringUtils.EMPTY;
+    Path keytabPath = sliderFileSystem.buildKeytabInstallationDirPath(folder);
+    RemoteIterator<LocatedFileStatus> files =
+        sliderFileSystem.getFileSystem().listFiles(keytabPath, true);
+    log.info("Keytabs:");
+    while (files.hasNext()) {
+      log.info("\t" + files.next().getPath().toString());
+    }
+
+    return EXIT_SUCCESS;
+  }
+
+  private int actionDeleteKeytab(ActionKeytabArgs keytabInfo)
+      throws BadCommandArgumentsException, IOException {
+    if (StringUtils.isEmpty(keytabInfo.folder)) {
       throw new BadCommandArgumentsException(
           "A valid destination keytab sub-folder name is required (e.g. 'security').\n"
-              + CommonArgs.usage(serviceArgs, ACTION_INSTALL_KEYTAB));
+          + CommonArgs.usage(serviceArgs, ACTION_KEYTAB));
     }
 
-    if (StringUtils.isEmpty(installKeytabInfo.keytabUri)) {
-      throw new BadCommandArgumentsException("A valid local keytab location is required.");
-    } else {
-      File keytabFile = new File(installKeytabInfo.keytabUri);
-      if (!keytabFile.exists() || keytabFile.isDirectory()) {
-        throw new BadCommandArgumentsException("Unable to access supplied keytab file at " +
-                                               keytabFile.getAbsolutePath());
-      } else {
-        srcFile = new Path(keytabFile.toURI());
-      }
+    if (StringUtils.isEmpty(keytabInfo.keytab)) {
+      throw new BadCommandArgumentsException("A keytab name is required.");
     }
 
-    Path pkgPath = sliderFileSystem.buildKeytabInstallationDirPath(installKeytabInfo.folder);
-    sliderFileSystem.getFileSystem().mkdirs(pkgPath);
-    sliderFileSystem.getFileSystem().setPermission(pkgPath, new FsPermission(
+    Path pkgPath = sliderFileSystem.buildKeytabInstallationDirPath(keytabInfo.folder);
+
+    Path fileInFs = new Path(pkgPath, keytabInfo.keytab );
+    log.info("Deleting keytab {}", fileInFs);
+    FileSystem sfs = sliderFileSystem.getFileSystem();
+    require(sfs.exists(fileInFs), "No keytab to delete found at %s", fileInFs.toUri());
+    sfs.delete(fileInFs, false);
+
+    return EXIT_SUCCESS;
+  }
+
+  private int actionInstallKeytab(ActionKeytabArgs keytabInfo)
+      throws BadCommandArgumentsException, IOException {
+    Path srcFile = null;
+    require(isSet(keytabInfo.folder),
+        "A valid destination keytab sub-folder name is required (e.g. 'security').\n"
+        + CommonArgs.usage(serviceArgs, ACTION_KEYTAB));
+
+    requireArgumentSet(Arguments.ARG_KEYTAB, keytabInfo.keytab);
+    File keytabFile = new File(keytabInfo.keytab);
+    require(keytabFile.isFile(),
+        "Unable to access supplied keytab file at %s", keytabFile.getAbsolutePath());
+    srcFile = new Path(keytabFile.toURI());
+
+    Path pkgPath = sliderFileSystem.buildKeytabInstallationDirPath(keytabInfo.folder);
+    FileSystem sfs = sliderFileSystem.getFileSystem();
+    sfs.mkdirs(pkgPath);
+    sfs.setPermission(pkgPath, new FsPermission(
         FsAction.ALL, FsAction.NONE, FsAction.NONE));
 
     Path fileInFs = new Path(pkgPath, srcFile.getName());
-    log.info("Installing keytab {} at {} and overwrite is {}.", srcFile, fileInFs, installKeytabInfo.overwrite);
-    if (sliderFileSystem.getFileSystem().exists(fileInFs) && !installKeytabInfo.overwrite) {
-      throw new BadCommandArgumentsException("Keytab exists at " +
-                                             fileInFs.toUri().toString() +
-                                             ". Use --overwrite to overwrite.");
-    }
+    log.info("Installing keytab {} at {} and overwrite is {}.",
+        srcFile, fileInFs, keytabInfo.overwrite);
+    require(!(sfs.exists(fileInFs) && !keytabInfo.overwrite),
+        "Keytab exists at %s. Use --overwrite to overwrite.", fileInFs.toUri());
 
-    sliderFileSystem.getFileSystem().copyFromLocalFile(false, installKeytabInfo.overwrite, srcFile, fileInFs);
-    sliderFileSystem.getFileSystem().setPermission(fileInFs, new FsPermission(
-        FsAction.READ_WRITE, FsAction.NONE, FsAction.NONE));
+    sfs.copyFromLocalFile(false, keytabInfo.overwrite, srcFile, fileInFs);
+    sfs.setPermission(fileInFs,
+        new FsPermission(FsAction.READ_WRITE, FsAction.NONE, FsAction.NONE));
 
     return EXIT_SUCCESS;
+  }
+
+  @Override
+  public int actionInstallKeytab(ActionInstallKeytabArgs installKeytabInfo)
+      throws YarnException, IOException {
+    log.warn("The 'install-keytab' option has been deprecated.  Please use 'keytab --install'.");
+    return actionKeytab(new ActionKeytabArgs(installKeytabInfo));
   }
 
   @Override
   public int actionInstallPkg(ActionInstallPackageArgs installPkgInfo) throws
       YarnException,
       IOException {
-
-    Path srcFile = null;
+    log.warn("The " + ACTION_INSTALL_PACKAGE
+        + " option has been deprecated. Please use '"
+        + ACTION_PACKAGE + " " + ClientArgs.ARG_INSTALL + "'.");
     if (StringUtils.isEmpty(installPkgInfo.name)) {
       throw new BadCommandArgumentsException(
-          "A valid application type name is required (e.g. HBASE).\n"
+          E_INVALID_APPLICATION_TYPE_NAME + "\n"
               + CommonArgs.usage(serviceArgs, ACTION_INSTALL_PACKAGE));
     }
+    Path srcFile = extractPackagePath(installPkgInfo.packageURI);
 
-    if (StringUtils.isEmpty(installPkgInfo.packageURI)) {
-      throw new BadCommandArgumentsException("A valid application package location required.");
+    // Do not provide new options to install-package command as it is in
+    // deprecated mode. So version is kept null here. Use package --install.
+    Path pkgPath = sliderFileSystem.buildPackageDirPath(installPkgInfo.name,
+        null);
+    FileSystem sfs = sliderFileSystem.getFileSystem();
+    sfs.mkdirs(pkgPath);
+
+    Path fileInFs = new Path(pkgPath, srcFile.getName());
+    log.info("Installing package {} at {} and overwrite is {}.",
+        srcFile, fileInFs, installPkgInfo.replacePkg);
+    require(!(sfs.exists(fileInFs) && !installPkgInfo.replacePkg),
+          "Package exists at %s. : %s", fileInFs.toUri(), E_USE_REPLACEPKG_TO_OVERWRITE);
+    sfs.copyFromLocalFile(false, installPkgInfo.replacePkg, srcFile, fileInFs);
+    return EXIT_SUCCESS;
+  }
+
+  @Override
+  public int actionClient(ActionClientArgs clientInfo) throws
+      YarnException,
+      IOException {
+    if (clientInfo.install) {
+      return doClientInstall(clientInfo);
+    } else if (clientInfo.getCertStore) {
+      return doCertificateStoreRetrieval(clientInfo);
     } else {
-      File pkgFile = new File(installPkgInfo.packageURI);
-      if (!pkgFile.exists() || pkgFile.isDirectory()) {
-        throw new BadCommandArgumentsException("Unable to access supplied pkg file at " +
-                                               pkgFile.getAbsolutePath());
-      } else {
-        srcFile = new Path(pkgFile.toURI());
+      throw new BadCommandArgumentsException(
+          "Only install, keystore, and truststore commands are supported for the client.\n"
+          + CommonArgs.usage(serviceArgs, ACTION_CLIENT));
+
+    }
+  }
+
+  private int doCertificateStoreRetrieval(ActionClientArgs clientInfo)
+      throws YarnException, IOException {
+    if (clientInfo.keystore != null && clientInfo.truststore != null) {
+      throw new BadCommandArgumentsException(
+          "Only one of either keystore or truststore can be retrieved at one time.  "
+          + "Retrieval of both should be done separately\n"
+          + CommonArgs.usage(serviceArgs, ACTION_CLIENT));
+    }
+
+    requireArgumentSet(Arguments.ARG_NAME, clientInfo.name);
+
+    File storeFile = null;
+    SecurityStore.StoreType type;
+    if (clientInfo.keystore != null) {
+      storeFile = clientInfo.keystore;
+      type = SecurityStore.StoreType.keystore;
+    } else {
+      storeFile = clientInfo.truststore;
+      type = SecurityStore.StoreType.truststore;
+    }
+
+    require (!storeFile.exists(),
+        "File %s already exists.  Please remove that file or select a different file name.",
+         storeFile.getAbsolutePath());
+    String hostname = null;
+    if (type == SecurityStore.StoreType.keystore) {
+      hostname = clientInfo.hostname;
+      if (hostname == null) {
+        hostname = InetAddress.getLocalHost().getCanonicalHostName();
+        log.info("No hostname specified via command line. Using {}", hostname);
       }
     }
 
-    Path pkgPath = sliderFileSystem.buildPackageDirPath(installPkgInfo.name);
-    sliderFileSystem.getFileSystem().mkdirs(pkgPath);
-
-    Path fileInFs = new Path(pkgPath, srcFile.getName());
-    log.info("Installing package {} at {} and overwrite is {}.", srcFile, fileInFs, installPkgInfo.replacePkg);
-    if (sliderFileSystem.getFileSystem().exists(fileInFs) && !installPkgInfo.replacePkg) {
-      throw new BadCommandArgumentsException("Pkg exists at " +
-                                             fileInFs.toUri().toString() +
-                                             ". Use --replacepkg to overwrite.");
+    String password = clientInfo.password;
+    if (password == null) {
+      String provider = clientInfo.provider;
+      String alias = clientInfo.alias;
+      if (provider != null && alias != null) {
+        Configuration conf = new Configuration(getConfig());
+        conf.set(CredentialProviderFactory.CREDENTIAL_PROVIDER_PATH, provider);
+        char[] chars = conf.getPassword(alias);
+        if (chars == null) {
+          CredentialProvider credentialProvider =
+              CredentialProviderFactory.getProviders(conf).get(0);
+          chars = readOnePassword(alias);
+          credentialProvider.createCredentialEntry(alias, chars);
+          credentialProvider.flush();
+        }
+        password = String.valueOf(chars);
+        Arrays.fill(chars, ' ');
+      } else {
+        log.info("No password and no provider/alias pair were provided, " +
+            "prompting for password");
+        // get a password
+        password = String.valueOf(readOnePassword(type.name()));
+      }
     }
 
-    sliderFileSystem.getFileSystem().copyFromLocalFile(false, installPkgInfo.replacePkg, srcFile, fileInFs);
+    byte[] keystore = createClusterOperations(clientInfo.name)
+        .getClientCertificateStore(hostname, "client", password, type.name());
+    // persist to file
+    IOUtils.write(keystore, new FileOutputStream(storeFile));
+
     return EXIT_SUCCESS;
+  }
+
+  private int doClientInstall(ActionClientArgs clientInfo)
+      throws IOException, SliderException {
+
+    require(clientInfo.installLocation != null,
+          E_INVALID_INSTALL_LOCATION +"\n"
+          + CommonArgs.usage(serviceArgs, ACTION_CLIENT));
+    require(clientInfo.installLocation.exists(),
+        E_INSTALL_PATH_DOES_NOT_EXIST + ": " + clientInfo.installLocation.getAbsolutePath());
+
+    require(clientInfo.installLocation.isDirectory(),
+        E_INVALID_INSTALL_PATH + ": " + clientInfo.installLocation.getAbsolutePath());
+
+    File pkgFile;
+    require(isSet(clientInfo.packageURI), E_INVALID_APPLICATION_PACKAGE_LOCATION);
+    pkgFile = new File(clientInfo.packageURI);
+    require(pkgFile.isFile(),
+        E_UNABLE_TO_READ_SUPPLIED_PACKAGE_FILE + " at %s", pkgFile.getAbsolutePath());
+
+    JSONObject config = null;
+    if(clientInfo.clientConfig != null) {
+      try {
+        byte[] encoded = Files.toByteArray(clientInfo.clientConfig);
+        config = new JSONObject(new String(encoded, Charset.defaultCharset()));
+      } catch (JSONException jsonEx) {
+        log.error("Unable to read supplied configuration at {}: {}",
+            clientInfo.clientConfig, jsonEx);
+        log.debug("Unable to read supplied configuration at {}: {}",
+            clientInfo.clientConfig, jsonEx, jsonEx);
+        throw new BadConfigException(E_MUST_BE_A_VALID_JSON_FILE, jsonEx);
+      }
+    }
+
+    // Only INSTALL is supported
+    AbstractClientProvider
+        provider = createClientProvider(SliderProviderFactory.DEFAULT_CLUSTER_TYPE);
+    provider.processClientOperation(sliderFileSystem,
+        "INSTALL",
+        clientInfo.installLocation,
+        pkgFile,
+        config,
+        clientInfo.name);
+    return EXIT_SUCCESS;
+  }
+
+
+  @Override
+  public int actionPackage(ActionPackageArgs actionPackageInfo)
+      throws YarnException, IOException {
+    initializeOutputStream(actionPackageInfo.out);
+    int exitCode = -1;
+    if (actionPackageInfo.help) {
+      exitCode = actionHelp(ACTION_PACKAGE);
+    }
+    if (actionPackageInfo.install) {
+      exitCode = actionPackageInstall(actionPackageInfo);
+    }
+    if (actionPackageInfo.delete) {
+      exitCode = actionPackageDelete(actionPackageInfo);
+    }
+    if (actionPackageInfo.list) {
+      exitCode = actionPackageList();
+    }
+    if (actionPackageInfo.instances) {
+      exitCode = actionPackageInstances();
+    }
+    finalizeOutputStream(actionPackageInfo.out);
+    if (exitCode != -1) {
+      return exitCode;
+    }
+    throw new BadCommandArgumentsException(
+        "Select valid package operation option");
+  }
+
+  private void initializeOutputStream(String outFile)
+      throws FileNotFoundException {
+    if (outFile != null) {
+      clientOutputStream = new PrintStream(new FileOutputStream(outFile));
+    } else {
+      clientOutputStream = System.out;
+    }
+  }
+
+  private void finalizeOutputStream(String outFile) {
+    if (outFile != null && clientOutputStream != null) {
+      clientOutputStream.flush();
+      clientOutputStream.close();
+    }
+    clientOutputStream = System.out;
+  }
+
+  private int actionPackageInstances() throws YarnException, IOException {
+    Map<String, Path> persistentInstances = sliderFileSystem
+        .listPersistentInstances();
+    if (persistentInstances.isEmpty()) {
+      log.info("No slider cluster specification available");
+      return EXIT_SUCCESS;
+    }
+    String pkgPathValue = sliderFileSystem
+        .buildPackageDirPath(StringUtils.EMPTY, StringUtils.EMPTY).toUri()
+        .getPath();
+    FileSystem fs = sliderFileSystem.getFileSystem();
+    Iterator<Map.Entry<String, Path>> instanceItr = persistentInstances
+        .entrySet().iterator();
+    log.info("List of applications with its package name and path");
+    println("%-25s  %15s  %30s  %s", "Cluster Name", "Package Name",
+        "Package Version", "Application Location");
+    while(instanceItr.hasNext()) {
+      Map.Entry<String, Path> entry = instanceItr.next();
+      String clusterName = entry.getKey();
+      Path clusterPath = entry.getValue();
+      AggregateConf instanceDefinition = loadInstanceDefinitionUnresolved(
+          clusterName, clusterPath);
+      Path appDefPath = null;
+      try {
+        appDefPath = new Path(
+            getApplicationDefinitionPath(instanceDefinition
+                .getAppConfOperations()));
+      } catch (BadConfigException e) {
+        // Invalid cluster state, so move on to next. No need to log anything
+        // as this is just listing of instances.
+        continue;
+      }
+      if (!appDefPath.isUriPathAbsolute()) {
+        appDefPath = new Path(fs.getHomeDirectory(), appDefPath);
+      }
+      String appDefPathStr = appDefPath.toUri().toString();
+      try {
+        if (appDefPathStr.contains(pkgPathValue) && fs.isFile(appDefPath)) {
+          String packageName = appDefPath.getParent().getName();
+          String packageVersion = StringUtils.EMPTY;
+          if (instanceDefinition.isVersioned()) {
+            packageVersion = packageName;
+            packageName = appDefPath.getParent().getParent().getName();
+          }
+          println("%-25s  %15s  %30s  %s", clusterName, packageName,
+              packageVersion, appDefPathStr);
+        }
+      } catch (IOException e) {
+        log.debug("{} application definition path {} is not found.", clusterName, appDefPathStr);
+      }
+    }
+    return EXIT_SUCCESS;
+  }
+
+  private int actionPackageList() throws IOException {
+    Path pkgPath = sliderFileSystem.buildPackageDirPath(StringUtils.EMPTY,
+        StringUtils.EMPTY);
+    log.info("Package install path : {}", pkgPath);
+    FileSystem sfs = sliderFileSystem.getFileSystem();
+    if (!sfs.isDirectory(pkgPath)) {
+      log.info("No package(s) installed");
+      return EXIT_SUCCESS;
+    }
+    FileStatus[] fileStatus = sfs.listStatus(pkgPath);
+    boolean hasPackage = false;
+    StringBuilder sb = new StringBuilder();
+    sb.append("List of installed packages:\n");
+    for (FileStatus fstat : fileStatus) {
+      if (fstat.isDirectory()) {
+        sb.append("\t").append(fstat.getPath().getName());
+        sb.append("\n");
+        hasPackage = true;
+      }
+    }
+    if (hasPackage) {
+      println(sb.toString());
+    } else {
+      log.info("No package(s) installed");
+    }
+    return EXIT_SUCCESS;
+  }
+
+  private int actionPackageInstall(ActionPackageArgs actionPackageArgs)
+      throws YarnException, IOException {
+    requireArgumentSet(Arguments.ARG_NAME, actionPackageArgs.name);
+
+    Path srcFile = extractPackagePath(actionPackageArgs.packageURI);
+
+    Path pkgPath = sliderFileSystem.buildPackageDirPath(actionPackageArgs.name,
+        actionPackageArgs.version);
+    FileSystem fs = sliderFileSystem.getFileSystem();
+    if (!fs.exists(pkgPath)) {
+      fs.mkdirs(pkgPath);
+    }
+
+    Path fileInFs = new Path(pkgPath, srcFile.getName());
+    require(actionPackageArgs.replacePkg || !fs.exists(fileInFs),
+        E_PACKAGE_EXISTS +" at  %s. Use --replacepkg to overwrite.", fileInFs.toUri());
+
+    log.info("Installing package {} to {} (overwrite set to {})", srcFile,
+        fileInFs, actionPackageArgs.replacePkg);
+    fs.copyFromLocalFile(false, actionPackageArgs.replacePkg, srcFile, fileInFs);
+
+    String destPathWithHomeDir = Path
+        .getPathWithoutSchemeAndAuthority(fileInFs).toString();
+    String destHomeDir = Path.getPathWithoutSchemeAndAuthority(
+        fs.getHomeDirectory()).toString();
+    // a somewhat contrived approach to stripping out the home directory and any trailing
+    // separator; designed to work on windows and unix
+    String destPathWithoutHomeDir;
+    if (destPathWithHomeDir.startsWith(destHomeDir)) {
+      destPathWithoutHomeDir = destPathWithHomeDir.substring(destHomeDir.length());
+      if (destPathWithoutHomeDir.startsWith("/") || destPathWithoutHomeDir.startsWith("\\")) {
+        destPathWithoutHomeDir = destPathWithoutHomeDir.substring(1);
+      }
+    } else {
+      destPathWithoutHomeDir = destPathWithHomeDir;
+    }
+    log.info("Set " + AgentKeys.APP_DEF + " in your app config JSON to {}",
+        destPathWithoutHomeDir);
+
+    return EXIT_SUCCESS;
+  }
+
+  private Path extractPackagePath(String packageURI)
+      throws BadCommandArgumentsException {
+    require(isSet(packageURI), E_INVALID_APPLICATION_PACKAGE_LOCATION);
+    File pkgFile = new File(packageURI);
+    require(pkgFile.isFile(),
+        E_UNABLE_TO_READ_SUPPLIED_PACKAGE_FILE + ":  " + pkgFile.getAbsolutePath());
+    return new Path(pkgFile.toURI());
+  }
+
+  private int actionPackageDelete(ActionPackageArgs actionPackageArgs) throws
+      YarnException, IOException {
+    requireArgumentSet(Arguments.ARG_NAME, actionPackageArgs.name);
+
+    Path pkgPath = sliderFileSystem.buildPackageDirPath(actionPackageArgs.name,
+        actionPackageArgs.version);
+    FileSystem fs = sliderFileSystem.getFileSystem();
+    require(fs.exists(pkgPath), E_PACKAGE_DOES_NOT_EXIST +": %s ", pkgPath.toUri());
+    log.info("Deleting package {} at {}.", actionPackageArgs.name, pkgPath);
+
+    if(fs.delete(pkgPath, true)) {
+      log.info("Deleted package {} " + actionPackageArgs.name);
+      return EXIT_SUCCESS;
+    } else {
+      log.warn("Package deletion failed.");
+      return EXIT_NOT_FOUND;
+    }
   }
 
   @Override
@@ -763,12 +1469,20 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
    * @throws YarnException
    * @throws IOException
    */
-  
+
   public void buildInstanceDefinition(String clustername,
-      AbstractClusterBuildingActionArgs buildInfo, boolean overwrite, boolean liveClusterAllowed)
-        throws YarnException, IOException {
+      AbstractClusterBuildingActionArgs buildInfo, boolean overwrite,
+      boolean liveClusterAllowed) throws YarnException, IOException {
+    buildInstanceDefinition(clustername, buildInfo, overwrite,
+        liveClusterAllowed, false);
+  }
+
+  public void buildInstanceDefinition(String clustername,
+      AbstractClusterBuildingActionArgs buildInfo, boolean overwrite,
+      boolean liveClusterAllowed, boolean isUpgradeFlow) throws YarnException,
+      IOException {
     // verify that a live cluster isn't there
-    SliderUtils.validateClusterName(clustername);
+    validateClusterName(clustername);
     verifyBindingsDefined();
     if (!liveClusterAllowed) {
       verifyNoLiveClusters(clustername, "Create");
@@ -825,20 +1539,29 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       }
     }
 
+    if (isUpgradeFlow) {
+      ActionUpgradeArgs upgradeInfo = (ActionUpgradeArgs) buildInfo;
+      if (!upgradeInfo.force) {
+        validateClientAndClusterResource(clustername, resources);
+      }
+    }
+
     //get the command line options
     ConfTree cmdLineAppOptions = buildInfo.buildAppOptionsConfTree();
     ConfTree cmdLineResourceOptions = buildInfo.buildResourceOptionsConfTree();
 
     appConf.merge(cmdLineAppOptions);
 
+    AppDefinitionPersister appDefinitionPersister = new AppDefinitionPersister(sliderFileSystem);
+    appDefinitionPersister.processSuppliedDefinitions(clustername, buildInfo, appConf);
+
     // put the role counts into the resources file
     Map<String, String> argsRoleMap = buildInfo.getComponentMap();
     for (Map.Entry<String, String> roleEntry : argsRoleMap.entrySet()) {
       String count = roleEntry.getValue();
       String key = roleEntry.getKey();
-      log.debug("{} => {}", key, count);
-      resources.getOrAddComponent(key)
-                 .put(ResourceKeys.COMPONENT_INSTANCES, count);
+      log.info("{} => {}", key, count);
+      resources.getOrAddComponent(key).put(COMPONENT_INSTANCES, count);
     }
 
     //all CLI role options
@@ -873,11 +1596,11 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     builder.setQueue(buildInfo.queue);
 
     String quorum = buildInfo.getZKhosts();
-    if (SliderUtils.isUnset(quorum)) {
+    if (isUnset(quorum)) {
       quorum = registryQuorum;
     }
     if (isUnset(quorum)) {
-      throw new BadConfigException("No Zookeeper quorum defined");
+      throw new BadConfigException(E_NO_ZOOKEEPER_QUORUM);
     }
     ZKPathBuilder zkPaths = new ZKPathBuilder(getAppName(),
         getUsername(),
@@ -889,7 +1612,8 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     if (isSet(zookeeperRoot)) {
       zkPaths.setAppPath(zookeeperRoot);
     } else {
-      String createDefaultZkNode = appConf.getGlobalOptions().getOption(AgentKeys.CREATE_DEF_ZK_NODE, "false");
+      String createDefaultZkNode = appConf.getGlobalOptions()
+          .getOption(AgentKeys.CREATE_DEF_ZK_NODE, "false");
       if (createDefaultZkNode.equals("true")) {
         String defaultZKPath = createZookeeperNode(clustername, false);
         log.debug("ZK node created for application instance: {}", defaultZKPath);
@@ -915,17 +1639,103 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
 
     // make any substitutions needed at this stage
     replaceTokens(appConf.getConfTree(), getUsername(), clustername);
+<<<<<<< HEAD
+=======
+
+    // TODO: Refactor the validation code and persistence code
+    try {
+      persistInstanceDefinition(overwrite, appconfdir, builder);
+      appDefinitionPersister.persistPackages();
+
+    } catch (LockAcquireFailedException e) {
+      log.warn("Failed to get a Lock on {} : {}", builder, e, e);
+      throw new BadClusterStateException("Failed to save " + clustername
+                                         + ": " + e);
+    }
+>>>>>>> refs/remotes/apache/develop
 
     // providers to validate what there is
+    // TODO: Validation should be done before persistence
     AggregateConf instanceDescription = builder.getInstanceDescription();
     validateInstanceDefinition(sliderAM, instanceDescription, sliderFileSystem);
     validateInstanceDefinition(provider, instanceDescription, sliderFileSystem);
+  }
+
+  private void validateClientAndClusterResource(String clustername,
+      ConfTreeOperations clientResources) throws BadClusterStateException,
+      SliderException, IOException {
+    log.info("Validating upgrade resource definition with current cluster "
+        + "state (components and instance count)");
+    Map<String, Integer> clientComponentInstances = new HashMap<>();
+    for (String componentName : clientResources.getComponentNames()) {
+      if (!SliderKeys.COMPONENT_AM.equals(componentName)) {
+        clientComponentInstances.put(componentName, clientResources
+            .getComponentOptInt(componentName,
+                COMPONENT_INSTANCES, -1));
+      }
+    }
+
+    AggregateConf clusterConf = null;
     try {
-      persistInstanceDefinition(overwrite, appconfdir, builder);
+      clusterConf = loadPersistedClusterDescription(clustername);
     } catch (LockAcquireFailedException e) {
-      log.warn("Failed to get a Lock on {} : {}", builder, e);
-      throw new BadClusterStateException("Failed to save " + clustername
-                                         + ": " + e);
+      log.warn("Failed to get a Lock on cluster resource : {}", e, e);
+      throw new BadClusterStateException(
+          "Failed to load client resource definition " + clustername + ": " + e, e);
+    }
+    Map<String, Integer> clusterComponentInstances = new HashMap<>();
+    for (Map.Entry<String, Map<String, String>> component : clusterConf
+        .getResources().components.entrySet()) {
+      if (!SliderKeys.COMPONENT_AM.equals(component.getKey())) {
+        clusterComponentInstances.put(
+            component.getKey(),
+            Integer.decode(component.getValue().get(
+                COMPONENT_INSTANCES)));
+      }
+    }
+
+    // client and cluster should be an exact match
+    Iterator<Map.Entry<String, Integer>> clientComponentInstanceIt = clientComponentInstances
+        .entrySet().iterator();
+    while (clientComponentInstanceIt.hasNext()) {
+      Map.Entry<String, Integer> clientComponentInstanceEntry = clientComponentInstanceIt.next();
+      if (clusterComponentInstances.containsKey(clientComponentInstanceEntry.getKey())) {
+        // compare instance count now and remove from both maps if they match
+        if (clusterComponentInstances
+            .get(clientComponentInstanceEntry.getKey()) == clientComponentInstanceEntry
+            .getValue()) {
+          clusterComponentInstances.remove(clientComponentInstanceEntry.getKey());
+          clientComponentInstanceIt.remove();
+        }
+      }
+    }
+
+    if (!clientComponentInstances.isEmpty()
+        || !clusterComponentInstances.isEmpty()) {
+      log.error("Mismatch found in upgrade resource definition and cluster "
+          + "resource state");
+      if (!clientComponentInstances.isEmpty()) {
+        log.info("The upgrade resource definitions that do not match are:");
+        for (Map.Entry<String, Integer> clientComponentInstanceEntry : clientComponentInstances
+            .entrySet()) {
+          log.info("    Component Name: {}, Instance count: {}",
+              clientComponentInstanceEntry.getKey(),
+              clientComponentInstanceEntry.getValue());
+        }
+      }
+      if (!clusterComponentInstances.isEmpty()) {
+        log.info("The cluster resources that do not match are:");
+        for (Map.Entry<String, Integer> clusterComponentInstanceEntry : clusterComponentInstances
+            .entrySet()) {
+          log.info("    Component Name: {}, Instance count: {}",
+              clusterComponentInstanceEntry.getKey(),
+              clusterComponentInstanceEntry.getValue());
+        }
+      }
+      throw new BadConfigException("Resource definition provided for "
+          + "upgrade does not match with that of the currently running "
+          + "cluster.\nIf you are aware of what you are doing, rerun the "
+          + "command with " + Arguments.ARG_FORCE + " option.");
     }
   }
 
@@ -939,16 +1749,16 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
   @VisibleForTesting
   public static void replaceTokens(ConfTree conf,
       String userName, String clusterName) throws IOException {
-    Map<String,String> newglobal = new HashMap<String,String>();
+    Map<String,String> newglobal = new HashMap<>();
     for (Entry<String,String> entry : conf.global.entrySet()) {
       newglobal.put(entry.getKey(), replaceTokens(entry.getValue(),
           userName, clusterName));
     }
     conf.global.putAll(newglobal);
 
-    Map<String,List<String>> newcred = new HashMap<String,List<String>>();
+    Map<String,List<String>> newcred = new HashMap<>();
     for (Entry<String,List<String>> entry : conf.credentials.entrySet()) {
-      List<String> resultList = new ArrayList<String>();
+      List<String> resultList = new ArrayList<>();
       for (String v : entry.getValue()) {
         resultList.add(replaceTokens(v, userName, clusterName));
       }
@@ -968,8 +1778,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
 
   public FsPermission getClusterDirectoryPermissions(Configuration conf) {
     String clusterDirPermsOct =
-      conf.get(CLUSTER_DIRECTORY_PERMISSIONS,
-          DEFAULT_CLUSTER_DIRECTORY_PERMISSIONS);
+      conf.get(CLUSTER_DIRECTORY_PERMISSIONS, DEFAULT_CLUSTER_DIRECTORY_PERMISSIONS);
     return new FsPermission(clusterDirPermsOct);
   }
 
@@ -979,11 +1788,12 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
    * @throws BadCommandArgumentsException the exception raised on an invalid config
    */
   public void verifyBindingsDefined() throws BadCommandArgumentsException {
-    InetSocketAddress rmAddr = SliderUtils.getRmAddress(getConfig());
+    InetSocketAddress rmAddr = getRmAddress(getConfig());
     if (!getConfig().getBoolean(YarnConfiguration.RM_HA_ENABLED, false)
-     && !SliderUtils.isAddressDefined(rmAddr)) {
+     && !isAddressDefined(rmAddr)) {
       throw new BadCommandArgumentsException(
-        "No valid Resource Manager address provided in the argument "
+        E_NO_RESOURCE_MANAGER
+        + " in the argument "
         + Arguments.ARG_MANAGER
         + " or the configuration property "
         + YarnConfiguration.RM_ADDRESS 
@@ -1044,9 +1854,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
    * @throws UnknownApplicationInstanceException if the file is not found
    */
   public AggregateConf loadInstanceDefinitionUnresolved(String name,
-                                                         Path clusterDirectory) throws
-                                                                      IOException,
-      SliderException {
+            Path clusterDirectory) throws IOException, SliderException {
 
     try {
       AggregateConf definition =
@@ -1058,7 +1866,8 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       throw UnknownApplicationInstanceException.unknownInstance(name, e);
     }
   }
-    /**
+
+  /**
    * Load the instance definition. 
    * @param name cluster name
    * @param resolved flag to indicate the cluster should be resolved
@@ -1101,38 +1910,32 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
 
 
     deployedClusterName = clustername;
-    SliderUtils.validateClusterName(clustername);
+    validateClusterName(clustername);
     verifyNoLiveClusters(clustername, "Launch");
     Configuration config = getConfig();
     lookupZKQuorum();
-    boolean clusterSecure = SliderUtils.isHadoopClusterSecure(config);
+    boolean clusterSecure = isHadoopClusterSecure(config);
     //create the Slider AM provider -this helps set up the AM
     SliderAMClientProvider sliderAM = new SliderAMClientProvider(config);
 
     instanceDefinition.resolve();
     launchedInstanceDefinition = instanceDefinition;
 
-    ConfTreeOperations internalOperations =
-      instanceDefinition.getInternalOperations();
+    ConfTreeOperations internalOperations = instanceDefinition.getInternalOperations();
     MapOperations internalOptions = internalOperations.getGlobalOptions();
-    ConfTreeOperations resourceOperations =
-      instanceDefinition.getResourceOperations();
-    ConfTreeOperations appOperations =
-      instanceDefinition.getAppConfOperations();
+    ConfTreeOperations resourceOperations = instanceDefinition.getResourceOperations();
+    ConfTreeOperations appOperations = instanceDefinition.getAppConfOperations();
     Path generatedConfDirPath =
       createPathThatMustExist(internalOptions.getMandatoryOption(
-        InternalKeys.INTERNAL_GENERATED_CONF_PATH));
+        INTERNAL_GENERATED_CONF_PATH));
     Path snapshotConfPath =
       createPathThatMustExist(internalOptions.getMandatoryOption(
-        InternalKeys.INTERNAL_SNAPSHOT_CONF_PATH));
+        INTERNAL_SNAPSHOT_CONF_PATH));
 
 
     // cluster Provider
     AbstractClientProvider provider = createClientProvider(
-      internalOptions.getMandatoryOption(
-        InternalKeys.INTERNAL_PROVIDER_NAME));
-    // make sure the conf dir is valid;
-    
+      internalOptions.getMandatoryOption(INTERNAL_PROVIDER_NAME));
     if (log.isDebugEnabled()) {
       log.debug(instanceDefinition.toString());
     }
@@ -1142,7 +1945,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
 
     // add the tags if available
     Set<String> applicationTags = provider.getApplicationTags(sliderFileSystem,
-        appOperations.getGlobalOptions().get(AgentKeys.APP_DEF));
+        getApplicationDefinitionPath(appOperations));
     AppMasterLauncher amLauncher = new AppMasterLauncher(clustername,
         SliderKeys.APP_TYPE,
         config,
@@ -1167,8 +1970,8 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     String libdir = "lib";
     Path libPath = new Path(tempPath, libdir);
     sliderFileSystem.getFileSystem().mkdirs(libPath);
-    log.debug("FS={}, tempPath={}, libdir={}", sliderFileSystem.toString(),
-              tempPath, libPath);
+    log.debug("FS={}, tempPath={}, libdir={}", sliderFileSystem, tempPath, libPath);
+ 
     // set local resources for the application master
     // local files or archives as needed
     // In this scenario, the jar file for the application master is part of the local resources
@@ -1178,9 +1981,8 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     boolean hasServerLog4jProperties = false;
     Path remoteConfPath = null;
     String relativeConfDir = null;
-    String confdirProp =
-      System.getProperty(SliderKeys.PROPERTY_CONF_DIR);
-    if (confdirProp == null || confdirProp.isEmpty()) {
+    String confdirProp = System.getProperty(SliderKeys.PROPERTY_CONF_DIR);
+    if (isUnset(confdirProp)) {
       log.debug("No local configuration directory provided as system property");
     } else {
       File confDir = new File(confdirProp);
@@ -1188,11 +1990,19 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
         throw new BadConfigException(E_CONFIGURATION_DIRECTORY_NOT_FOUND,
                                      confDir);
       }
+<<<<<<< HEAD
       Path localConfDirPath = SliderUtils.createLocalPath(confDir);
       remoteConfPath = new Path(clusterDirectory, SliderKeys.SUBMITTED_CONF_DIR);
       log.debug("Slider configuration directory is {}; remote to be {}",
     		  localConfDirPath, remoteConfPath);
       SliderUtils.copyDirectory(config, localConfDirPath, remoteConfPath, null);
+=======
+      Path localConfDirPath = createLocalPath(confDir);
+      remoteConfPath = new Path(clusterDirectory, SliderKeys.SUBMITTED_CONF_DIR);
+      log.debug("Slider configuration directory is {}; remote to be {}", 
+          localConfDirPath, remoteConfPath);
+      copyDirectory(config, localConfDirPath, remoteConfPath, null);
+>>>>>>> refs/remotes/apache/develop
 
       File log4jserver =
           new File(confDir, SliderKeys.LOG4J_SERVER_PROP_FILENAME);
@@ -1212,7 +2022,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
         Map<String, LocalResource> submittedConfDir =
           sliderFileSystem.submitDirectory(remoteConfPath,
                                          relativeConfDir);
-        SliderUtils.mergeMaps(localResources, submittedConfDir);
+        mergeMaps(localResources, submittedConfDir);
       }
     }
     // build up the configuration 
@@ -1232,7 +2042,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     Configuration clientConfExtras = new Configuration(false);
     // then build up the generated path.
     FsPermission clusterPerms = getClusterDirectoryPermissions(config);
-    SliderUtils.copyDirectory(config, snapshotConfPath, generatedConfDirPath,
+    copyDirectory(config, snapshotConfPath, generatedConfDirPath,
         clusterPerms);
 
 
@@ -1285,23 +2095,33 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
 
     // TODO: consider supporting apps that don't have an image path
     Path imagePath =
-        SliderUtils.extractImagePath(sliderFileSystem, internalOptions);
+        extractImagePath(sliderFileSystem, internalOptions);
     if (sliderFileSystem.maybeAddImagePath(localResources, imagePath)) {
       log.debug("Registered image path {}", imagePath);
     }
 
     // build the environment
     amLauncher.putEnv(
-      SliderUtils.buildEnvMap(sliderAMResourceComponent));
-    ClasspathConstructor classpath = SliderUtils.buildClasspath(relativeConfDir,
+      buildEnvMap(sliderAMResourceComponent));
+    ClasspathConstructor classpath = buildClasspath(relativeConfDir,
         libdir,
         getConfig(),
+        sliderFileSystem,
         usingMiniMRCluster);
     amLauncher.setClasspath(classpath);
+    //add english env
+    amLauncher.setEnv("LANG", "en_US.UTF-8");
+    amLauncher.setEnv("LC_ALL", "en_US.UTF-8");
+    amLauncher.setEnv("LANGUAGE", "en_US.UTF-8");
+    amLauncher.putEnv(getAmLaunchEnv(config));
+    
+    for (Map.Entry<String, String> envs : getSystemEnv().entrySet()) {
+      log.debug("System env {}={}", envs.getKey(), envs.getValue());
+    }
     if (log.isDebugEnabled()) {
       log.debug("AM classpath={}", classpath);
       log.debug("Environment Map:\n{}",
-                SliderUtils.stringifyMap(amLauncher.getEnv()));
+                stringifyMap(amLauncher.getEnv()));
       log.debug("Files in lib path\n{}", sliderFileSystem.listFSDir(libPath));
     }
 
@@ -1309,21 +2129,18 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
 
     InetSocketAddress rmSchedulerAddress;
     try {
-      rmSchedulerAddress = SliderUtils.getRmSchedulerAddress(config);
+      rmSchedulerAddress = getRmSchedulerAddress(config);
     } catch (IllegalArgumentException e) {
       throw new BadConfigException("%s Address invalid: %s",
-                                   YarnConfiguration.RM_SCHEDULER_ADDRESS,
-                                   config.get(
-                                     YarnConfiguration.RM_SCHEDULER_ADDRESS)
-      );
-
+               YarnConfiguration.RM_SCHEDULER_ADDRESS,
+               config.get(YarnConfiguration.RM_SCHEDULER_ADDRESS));
     }
     String rmAddr = NetUtils.getHostPortString(rmSchedulerAddress);
 
     JavaCommandLineBuilder commandLine = new JavaCommandLineBuilder();
     // insert any JVM options);
     sliderAM.addJVMOptions(instanceDefinition, commandLine);
-    // enable asserts if the text option is set
+    // enable asserts
     commandLine.enableJavaAssertions();
     
     // if the conf dir has a log4j-server.properties, switch to that
@@ -1354,24 +2171,25 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       commandLine.add(Arguments.ARG_FILESYSTEM, serviceArgs.getFilesystemBinding());
     }
 
-    /**
-     * pass the registry binding
-     */
-    addConfOptionToCLI(commandLine, config, REGISTRY_PATH,
-        DEFAULT_REGISTRY_PATH);
-    addMandatoryConfOptionToCLI(commandLine, config,
-        RegistryConstants.KEY_REGISTRY_ZK_QUORUM);
+    // pass the registry binding
+    commandLine.addConfOptionToCLI(config, RegistryConstants.KEY_REGISTRY_ZK_ROOT,
+        RegistryConstants.DEFAULT_ZK_REGISTRY_ROOT);
+    commandLine.addMandatoryConfOption(config, RegistryConstants.KEY_REGISTRY_ZK_QUORUM);
 
     if (clusterSecure) {
       // if the cluster is secure, make sure that
       // the relevant security settings go over
-/*
-      addConfOptionToCLI(commandLine, config, KEY_SECURITY);
-*/
-      addConfOptionToCLI(commandLine,
-          config,
-          DFSConfigKeys.DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY);
+      commandLine.addConfOption(config, DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY);
     }
+
+    // copy over any/all YARN RM client values, in case the server-side XML conf file
+    // has the 0.0.0.0 address
+    commandLine.addConfOptions(config,
+        YarnConfiguration.RM_ADDRESS,
+        YarnConfiguration.RM_CLUSTER_ID,
+        YarnConfiguration.RM_HOSTNAME,
+        YarnConfiguration.RM_PRINCIPAL);
+
     // write out the path output
     commandLine.addOutAndErrFiles(STDOUT_AM, STDERR_AM);
 
@@ -1386,23 +2204,19 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
 
 
     // Set the priority for the application master
-
-    int amPriority = config.getInt(KEY_YARN_QUEUE_PRIORITY,
-                                   DEFAULT_YARN_QUEUE_PRIORITY);
-
-
-    amLauncher.setPriority(amPriority);
+    amLauncher.setPriority(config.getInt(KEY_YARN_QUEUE_PRIORITY,
+                                   DEFAULT_YARN_QUEUE_PRIORITY));
 
     // Set the queue to which this application is to be submitted in the RM
     // Queue for App master
     String amQueue = config.get(KEY_YARN_QUEUE, DEFAULT_YARN_QUEUE);
-    String suppliedQueue = internalOperations.getGlobalOptions().get(InternalKeys.INTERNAL_QUEUE);
-    if(!SliderUtils.isUnset(suppliedQueue)) {
+    String suppliedQueue = internalOperations.getGlobalOptions().get(INTERNAL_QUEUE);
+    if(!isUnset(suppliedQueue)) {
       amQueue = suppliedQueue;
       log.info("Using queue {} for the application instance.", amQueue);
     }
 
-    if (amQueue != null) {
+    if (isSet(amQueue)) {
       amLauncher.setQueue(amQueue);
     }
 
@@ -1411,6 +2225,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     return launchedApplication;
   }
 
+<<<<<<< HEAD
   private void propagatePythonExecutable(Configuration config,
                                          AggregateConf instanceDefinition) {
     String pythonExec = config.get(
@@ -1418,6 +2233,69 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     if (pythonExec != null) {
       instanceDefinition.getAppConfOperations().getGlobalOptions().putIfUnset(
           SliderXmlConfKeys.PYTHON_EXECUTABLE_PATH,
+=======
+  protected Map<String, String> getAmLaunchEnv(Configuration config) {
+    String sliderAmLaunchEnv = config.get(KEY_AM_LAUNCH_ENV);
+    log.debug("{} = {}", KEY_AM_LAUNCH_ENV, sliderAmLaunchEnv);
+    // Multiple env variables can be specified with a comma (,) separator
+    String[] envs = StringUtils.isEmpty(sliderAmLaunchEnv) ? null
+        : sliderAmLaunchEnv.split(",");
+    if (ArrayUtils.isEmpty(envs)) {
+      return Collections.emptyMap();
+    }
+    Map<String, String> amLaunchEnv = new HashMap<>();
+    for (String env : envs) {
+      if (StringUtils.isNotEmpty(env)) {
+        // Each env name/value is separated by equals sign (=)
+        String[] tokens = env.split("=");
+        if (tokens != null && tokens.length == 2) {
+          String envKey = tokens[0];
+          String envValue = tokens[1];
+          for (Map.Entry<String, String> placeholder : generatePlaceholderKeyValueMap(
+              env).entrySet()) {
+            if (StringUtils.isNotEmpty(placeholder.getValue())) {
+              envValue = envValue.replaceAll(
+                  Pattern.quote(placeholder.getKey()), placeholder.getValue());
+            }
+          }
+          if (Shell.WINDOWS) {
+            envValue = "%" + envKey + "%;" + envValue;
+          } else {
+            envValue = "$" + envKey + ":" + envValue;
+          }
+          log.info("Setting AM launch env {}={}", envKey, envValue);
+          amLaunchEnv.put(envKey, envValue);
+        }
+      }
+    }
+    return amLaunchEnv;
+  }
+
+  protected Map<String, String> generatePlaceholderKeyValueMap(String env) {
+    String PLACEHOLDER_PATTERN = "\\$\\{[^{]+\\}";
+    Pattern placeholderPattern = Pattern.compile(PLACEHOLDER_PATTERN);
+    Matcher placeholderMatcher = placeholderPattern.matcher(env);
+    Map<String, String> placeholderKeyValueMap = new HashMap<String, String>();
+    if (placeholderMatcher.find()) {
+      String placeholderKey = placeholderMatcher.group();
+      String systemKey = placeholderKey
+          .substring(2, placeholderKey.length() - 1).toUpperCase(Locale.ENGLISH)
+          .replaceAll("\\.", "_");
+      String placeholderValue = getSystemEnv(systemKey);
+      log.debug("Placeholder {}={}", placeholderKey, placeholderValue);
+      placeholderKeyValueMap.put(placeholderKey, placeholderValue);
+    }
+    return placeholderKeyValueMap;
+  }
+
+  private void propagatePythonExecutable(Configuration config,
+                                         AggregateConf instanceDefinition) {
+    String pythonExec = config.get(
+        PYTHON_EXECUTABLE_PATH);
+    if (pythonExec != null) {
+      instanceDefinition.getAppConfOperations().getGlobalOptions().putIfUnset(
+          PYTHON_EXECUTABLE_PATH,
+>>>>>>> refs/remotes/apache/develop
           pythonExec);
     }
   }
@@ -1447,7 +2325,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       new Duration(acceptWaitMillis));
 
     // may have failed, so check that
-    if (SliderUtils.hasAppFinished(report)) {
+    if (hasAppFinished(report)) {
       exitCode = buildExitCode(report);
     } else {
       // exit unless there is a wait
@@ -1480,71 +2358,15 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
    */
   private void propagatePrincipals(Configuration config,
                                    AggregateConf clusterSpec) {
-    String dfsPrincipal = config.get(
-        DFSConfigKeys.DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY);
+    String dfsPrincipal = config.get(DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY);
     if (dfsPrincipal != null) {
-      String siteDfsPrincipal = OptionKeys.SITE_XML_PREFIX +
-                                DFSConfigKeys.DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY;
+      String siteDfsPrincipal = SITE_XML_PREFIX + DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY;
       clusterSpec.getAppConfOperations().getGlobalOptions().putIfUnset(
         siteDfsPrincipal,
         dfsPrincipal);
     }
   }
 
-
-  private boolean addConfOptionToCLI(CommandLineBuilder cmdLine,
-      Configuration conf,
-      String key) {
-    String val = conf.get(key);
-    return defineIfSet(cmdLine, key, val);
-  }
-
-  private String addConfOptionToCLI(CommandLineBuilder cmdLine,
-      Configuration conf,
-      String key,
-      String defVal) {
-    String val = conf.get(key, defVal);
-    define(cmdLine, key, val);
-    return val;
-  }
-
-  /**
-   * Add a <code>-D key=val</code> command to the CLI
-   * @param cmdLine command line
-   * @param key key
-   * @param val value
-   */
-  private void define(CommandLineBuilder cmdLine, String key, String val) {
-    Preconditions.checkArgument(key != null, "null key");
-    Preconditions.checkArgument(val != null, "null value");
-    cmdLine.add(Arguments.ARG_DEFINE, key + "=" + val);
-  }
-
-  /**
-   * Add a <code>-D key=val</code> command to the CLI if <code>val</code>
-   * is not null
-   * @param cmdLine command line
-   * @param key key
-   * @param val value
-   */
-  private boolean defineIfSet(CommandLineBuilder cmdLine, String key, String val) {
-    Preconditions.checkArgument(key != null, "null key");
-    if (val != null) {
-      define(cmdLine, key, val);
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  private void addMandatoryConfOptionToCLI(CommandLineBuilder cmdLine,
-      Configuration conf,
-      String key) throws BadConfigException {
-    if (!addConfOptionToCLI(cmdLine, conf, key)) {
-      throw new BadConfigException("Missing configuration option: " + key);
-    }
-  }
-  
   /**
    * Create a path that must exist in the cluster fs
    * @param uri uri to create
@@ -1552,8 +2374,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
    * @throws FileNotFoundException if the path does not exist
    */
   public Path createPathThatMustExist(String uri) throws
-      SliderException,
-                                                  IOException {
+      SliderException, IOException {
     return sliderFileSystem.createPathThatMustExist(uri);
   }
 
@@ -1715,10 +2536,10 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
    * @param user user: "" means all users, null means "default"
    * @return a possibly empty list of Slider AMs
    */
-  @VisibleForTesting
+
   public List<ApplicationReport> listSliderInstances(String user)
     throws YarnException, IOException {
-    return YarnAppListClient.listInstances(user);
+    return yarnAppListClient.listInstances(user);
   }
 
   /**
@@ -1745,22 +2566,83 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
    * was named but it was not found
    */
   @Override
-  @VisibleForTesting
   public int actionList(String clustername, ActionListArgs args)
       throws IOException, YarnException {
+    Set<String> appInstances = getApplicationList(clustername, args);
+    // getApplicationList never returns null
+    return !appInstances.isEmpty() ? EXIT_SUCCESS
+        : ((appInstances.isEmpty() && isUnset(clustername)) ? EXIT_SUCCESS
+               : EXIT_FALSE);
+  }
+
+  /**
+   * Retrieve a list of all live instances. If clustername is supplied then it
+   * returns this specific cluster, if and only if it exists and is live.
+   * 
+   * @param clustername
+   *          cluster name (if looking for a specific live cluster)
+   * @return the list of application names which satisfies the list criteria
+   * @throws IOException
+   * @throws YarnException
+   */
+  public Set<String> getApplicationList(String clustername) throws IOException,
+      YarnException {
+    ActionListArgs args = new ActionListArgs();
+    args.live = true;
+    return getApplicationList(clustername, args);
+  }
+
+  /**
+   * Retrieve a list of application instances satisfying the query criteria.
+   * 
+   * @param clustername
+   *          List out specific instance name (set null for all)
+   * @param args
+   *          Action list arguments
+   * @return the list of application names which satisfies the list criteria
+   * @throws IOException
+   * @throws YarnException
+   * @throws UnknownApplicationInstanceException
+   *           if a specific instance was named but it was not found
+   */
+  public Set<String> getApplicationList(String clustername, ActionListArgs args)
+      throws IOException, YarnException {
+    if (args.help) {
+      actionHelp(ACTION_LIST);
+      // the above call throws an exception so the return is not really required
+      return Collections.emptySet();
+    }
     verifyBindingsDefined();
 
     boolean live = args.live;
     String state = args.state;
+    boolean listContainers = args.containers;
     boolean verbose = args.verbose;
+    String version = args.version;
+    Set<String> components = args.components;
 
     if (live && !state.isEmpty()) {
       throw new BadCommandArgumentsException(
           Arguments.ARG_LIVE + " and " + Arguments.ARG_STATE + " are exclusive");
     }
+    if (listContainers && isUnset(clustername)) {
+      throw new BadCommandArgumentsException(
+          "Should specify an application instance with "
+              + Arguments.ARG_CONTAINERS);
+    }
+    // specifying both --version and --components with --containers is okay
+    if (StringUtils.isNotEmpty(version) && !listContainers) {
+      throw new BadCommandArgumentsException(Arguments.ARG_VERSION
+          + " can be specified only with " + Arguments.ARG_CONTAINERS);
+    }
+    if (!components.isEmpty() && !listContainers) {
+      throw new BadCommandArgumentsException(Arguments.ARG_COMPONENTS
+          + " can be specified only with " + Arguments.ARG_CONTAINERS);
+    }
+
     // flag to indicate only services in a specific state are to be listed
     boolean listOnlyInState = live || !state.isEmpty();
-    
+
     YarnApplicationState min, max;
     if (live) {
       min = YarnApplicationState.NEW;
@@ -1778,20 +2660,21 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     if (persistentInstances.isEmpty() && isUnset(clustername)) {
       // an empty listing is a success if no cluster was named
       log.debug("No application instances found");
-      return EXIT_SUCCESS;
+      return Collections.emptySet();
     }
-    
+
     // and those the RM knows about
     List<ApplicationReport> instances = listSliderInstances(null);
-    SliderUtils.sortApplicationsByMostRecent(instances);
+    sortApplicationsByMostRecent(instances);
     Map<String, ApplicationReport> reportMap =
-        SliderUtils.buildApplicationReportMap(instances, min, max);
+        buildApplicationReportMap(instances, min, max);
     log.debug("Persisted {} deployed {} filtered[{}-{}] & de-duped to {}",
         persistentInstances.size(),
         instances.size(),
         min, max,
         reportMap.size() );
 
+    List<ContainerInformation> containers = null;
     if (isSet(clustername)) {
       // only one instance is expected
       // resolve the persistent value
@@ -1801,62 +2684,65 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       }
       // create a new map with only that instance in it.
       // this restricts the output of results to this instance
-      persistentInstances = new HashMap<String, Path>();
-      persistentInstances.put(clustername, persistent);  
+      persistentInstances = new HashMap<>();
+      persistentInstances.put(clustername, persistent);
+      if (listContainers) {
+        containers = getContainers(clustername);
+      }
     }
     
     // at this point there is either the entire list or a stripped down instance
-    int listed = 0;
-
+    Set<String> listedInstances = new HashSet<String>();
     for (String name : persistentInstances.keySet()) {
       ApplicationReport report = reportMap.get(name);
       if (!listOnlyInState || report != null) {
         // list the details if all were requested, or the filtering contained
         // a report
-        listed++;
-        String details = instanceDetailsToString(name, report, verbose);
+        listedInstances.add(name);
+        // containers will be non-null when only one instance is requested
+        String details = instanceDetailsToString(name, report,
+            containers, version, components, verbose);
         print(details);
       }
     }
     
-    return listed > 0 ? EXIT_SUCCESS: EXIT_FALSE;
+    return listedInstances;
+  }
+
+  public List<ContainerInformation> getContainers(String name)
+      throws YarnException, IOException {
+    SliderClusterOperations clusterOps = new SliderClusterOperations(
+        bondToCluster(name));
+    try {
+      return clusterOps.getContainers();
+    } catch (NoSuchNodeException e) {
+      throw new BadClusterStateException(
+          "Containers not found for application instance %s", name);
+    }
   }
 
   /**
-   * Convert the instance details of an application to a string
-   * @param name instance name
-   * @param report the application report
-   * @param verbose verbose output
-   * @return a string
+   * Enumerate slider instances for the current user, and the
+   * most recent app report, where available.
+   * @param listOnlyInState boolean to indicate that the instances should
+   * only include those in a YARN state
+   * <code> minAppState &lt;= currentState &lt;= maxAppState </code>
+   *
+   * @param minAppState minimum application state to include in enumeration.
+   * @param maxAppState maximum application state to include
+   * @return a map of application instance name to description
+   * @throws IOException Any IO problem
+   * @throws YarnException YARN problems
    */
-  String instanceDetailsToString(String name,
-      ApplicationReport report,
-      boolean verbose) {
-    // format strings
-    String staticf = "%-30s";
-    String reportedf = staticf + "  %10s  %-40s";
-    String livef = reportedf + " %s";
-    StringBuilder builder = new StringBuilder(200);
-    if (report == null) {
-      builder.append(String.format(staticf, name));
-    } else {
-      // there's a report to look at
-      String appId = report.getApplicationId().toString();
-      String state = report.getYarnApplicationState().toString();
-      if (report.getYarnApplicationState() == YarnApplicationState.RUNNING) {
-        // running: there's a URL
-        builder.append(String.format(livef, name, state, appId ,report.getTrackingUrl()));
-      } else {
-        builder.append(String.format(reportedf, name, state, appId));
-      }
-      if (verbose) {
-        builder.append('\n');
-        builder.append(SliderUtils.appReportToString(report, "\n  "));
-      }
-    }
-
-    builder.append('\n');
-    return builder.toString();
+  @Override
+  public Map<String, SliderInstanceDescription> enumSliderInstances(
+      boolean listOnlyInState,
+      YarnApplicationState minAppState,
+      YarnApplicationState maxAppState)
+      throws IOException, YarnException {
+    return yarnAppListClient.enumSliderInstances(listOnlyInState,
+        minAppState,
+        maxAppState);
   }
 
   /**
@@ -1896,11 +2782,15 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
   @Override
   @VisibleForTesting
   public int actionFlex(String name, ActionFlexArgs args) throws YarnException, IOException {
-    verifyBindingsDefined();
-    SliderUtils.validateClusterName(name);
-    log.debug("actionFlex({})", name);
-    Map<String, Integer> roleInstances = new HashMap<String, Integer>();
+    validateClusterName(name);
     Map<String, String> roleMap = args.getComponentMap();
+    // throw usage exception if no changes proposed
+    if (roleMap.size() == 0) {
+      actionHelp(ACTION_FLEX);
+    }
+    verifyBindingsDefined();
+    log.debug("actionFlex({})", name);
+    Map<String, Integer> roleInstances = new HashMap<>();
     for (Map.Entry<String, String> roleEntry : roleMap.entrySet()) {
       String key = roleEntry.getKey();
       String val = roleEntry.getValue();
@@ -1924,7 +2814,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
 
   public int actionExists(String name, ActionExistsArgs args) throws YarnException, IOException {
     verifyBindingsDefined();
-    SliderUtils.validateClusterName(name);
+    validateClusterName(name);
     boolean checkLive = args.live;
     log.debug("actionExists({}, {}, {})", name, checkLive, args.state);
 
@@ -1934,7 +2824,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       throw unknownClusterException(name);
     }
     String state = args.state;
-    if (!checkLive && SliderUtils.isUnset(state)) {
+    if (!checkLive && isUnset(state)) {
       log.info("Application {} exists", name);
       return EXIT_SUCCESS;
     }
@@ -1955,7 +2845,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
             appstate.ordinal() < YarnApplicationState.FINISHED.ordinal();
     } else {
       // scan for instance in single --state state
-      List<ApplicationReport> userInstances = yarnClient.listInstances("");
+      List<ApplicationReport> userInstances = yarnClient.listDeployedInstances("");
       state = state.toUpperCase(Locale.ENGLISH);
       YarnApplicationState desiredState = extractYarnApplicationState(state);
       ApplicationReport foundInstance =
@@ -1968,8 +2858,8 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       }
     }
 
-    SliderUtils.OnDemandReportStringifier report =
-        new SliderUtils.OnDemandReportStringifier(instance);
+    OnDemandReportStringifier report =
+        new OnDemandReportStringifier(instance);
     if (!inDesiredState) {
       //cluster in the list of apps but not running
       log.info("Application {} found but is in wrong state {}", name,
@@ -1989,7 +2879,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
   public int actionKillContainer(String name,
       ActionKillContainerArgs args) throws YarnException, IOException {
     String id = args.id;
-    if (SliderUtils.isUnset(id)) {
+    if (isUnset(id)) {
       throw new BadCommandArgumentsException("Missing container id");
     }
     log.info("killingContainer {}:{}", name, id);
@@ -2022,7 +2912,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
    * @return registry client -valid after the service is inited.
    */
   public YarnAppListClient getYarnAppListClient() {
-    return YarnAppListClient;
+    return yarnAppListClient;
   }
 
   /**
@@ -2034,7 +2924,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
    */
   private ApplicationReport findInstance(String appname)
       throws YarnException, IOException {
-    return YarnAppListClient.findInstance(appname);
+    return yarnAppListClient.findInstance(appname);
   }
   
   private RunningApplication findApplication(String appname)
@@ -2053,7 +2943,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
   private List<ApplicationReport> findAllLiveInstances(String appname)
     throws YarnException, IOException {
     
-    return YarnAppListClient.findAllLiveInstances(appname);
+    return yarnAppListClient.findAllLiveInstances(appname);
   }
 
   /**
@@ -2085,7 +2975,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
                                               YarnException,
                                               IOException {
     verifyBindingsDefined();
-    SliderUtils.validateClusterName(clustername);
+    validateClusterName(clustername);
     String outfile = statusArgs.getOutput();
     ClusterDescription status = getClusterDescription(clustername);
     String text = status.toJsonString();
@@ -2107,7 +2997,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
   public int actionFreeze(String clustername,
       ActionFreezeArgs freezeArgs) throws YarnException, IOException {
     verifyBindingsDefined();
-    SliderUtils.validateClusterName(clustername);
+    validateClusterName(clustername);
     int waittime = freezeArgs.getWaittime();
     String text = freezeArgs.message;
     boolean forcekill = freezeArgs.force;
@@ -2126,10 +3016,10 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       return EXIT_SUCCESS;
     }
     log.debug("App to stop was found: {}:\n{}", clustername,
-              new SliderUtils.OnDemandReportStringifier(app));
+              new OnDemandReportStringifier(app));
     if (app.getYarnApplicationState().ordinal() >=
         YarnApplicationState.FINISHED.ordinal()) {
-      log.info("Cluster {} is a terminated state {}", clustername,
+      log.info("Cluster {} is in a terminated state {}", clustername,
                app.getYarnApplicationState());
       return EXIT_SUCCESS;
     }
@@ -2162,10 +3052,10 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
         log.debug("Cluster stop command issued");
 
       } catch (YarnException e) {
-        log.warn("Exception while trying to terminate {}: {}", clustername, e);
+        log.warn("Exception while trying to terminate {}", clustername, e);
         return EXIT_FALSE;
       } catch (IOException e) {
-        log.warn("Exception while trying to terminate {}: {}", clustername, e);
+        log.warn("Exception while trying to terminate {}", clustername, e);
         return EXIT_FALSE;
       }
     }
@@ -2182,12 +3072,8 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
           return EXIT_FALSE;
         }
       }
-
-// JDK7    } catch (YarnException | IOException e) {
-    } catch (YarnException e) {
-      log.warn("Exception while waiting for the application {} to shut down: {}",
-               clustername, e);
-    } catch ( IOException e) {
+      
+    } catch (YarnException | IOException e) {
       log.warn("Exception while waiting for the application {} to shut down: {}",
                clustername, e);
     }
@@ -2197,7 +3083,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
 
   @Override
   public int actionThaw(String clustername, ActionThawArgs thaw) throws YarnException, IOException {
-    SliderUtils.validateClusterName(clustername);
+    validateClusterName(clustername);
     verifyBindingsDefined();
     // see if it is actually running and bail out;
     verifyNoLiveClusters(clustername, "Start");
@@ -2217,7 +3103,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
   public int flex(String clustername, Map<String, Integer> roleInstances)
       throws YarnException, IOException {
     verifyBindingsDefined();
-    SliderUtils.validateClusterName(clustername);
+    validateClusterName(clustername);
     Path clusterDirectory = sliderFileSystem.buildClusterDirPath(clustername);
     AggregateConf instanceDefinition = loadInstanceDefinitionUnresolved(
       clustername,
@@ -2228,7 +3114,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     for (Map.Entry<String, Integer> entry : roleInstances.entrySet()) {
       String role = entry.getKey();
       int count = entry.getValue();
-      resources.getOrAddComponent(role).put(ResourceKeys.COMPONENT_INSTANCES,
+      resources.getOrAddComponent(role).put(COMPONENT_INSTANCES,
                                             Integer.toString(count));
 
       log.debug("Flexed cluster specification ( {} -> {}) : \n{}",
@@ -2239,7 +3125,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     SliderAMClientProvider sliderAM = new SliderAMClientProvider(getConfig());
     AbstractClientProvider provider = createClientProvider(
         instanceDefinition.getInternalOperations().getGlobalOptions().getMandatoryOption(
-            InternalKeys.INTERNAL_PROVIDER_NAME));
+            INTERNAL_PROVIDER_NAME));
     // slider provider to validate what there is
     validateInstanceDefinition(sliderAM, instanceDefinition, sliderFileSystem);
     validateInstanceDefinition(provider, instanceDefinition, sliderFileSystem);
@@ -2247,7 +3133,8 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     int exitCode = EXIT_FALSE;
     // save the specification
     try {
-      InstanceIO.updateInstanceDefinition(sliderFileSystem, clusterDirectory, instanceDefinition);
+      InstanceIO.saveInstanceDefinition(sliderFileSystem, clusterDirectory,
+          instanceDefinition);
     } catch (LockAcquireFailedException e) {
       // lock failure
       log.debug("Failed to lock dir {}", clusterDirectory, e);
@@ -2374,23 +3261,11 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
 
     if (uuids.length == 0) {
       // short cut on an empty list
-      return new LinkedList<ClusterNode>();
+      return new LinkedList<>();
     }
     return createClusterOperations().listClusterNodes(uuids);
   }
 
-  /**
-   * Get a node from the AM
-   * @param uuid uuid of node
-   * @return deserialized node
-   * @throws IOException IO problems
-   * @throws NoSuchNodeException if the node isn't found
-   */
-  @VisibleForTesting
-  public ClusterNode getNode(String uuid) throws IOException, YarnException {
-    return createClusterOperations().getNode(uuid);
-  }
-  
   /**
    * Get the instance definition from the far end
    */
@@ -2440,7 +3315,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
    * @throws YarnException YARN issues
    * @throws IOException IO problems
    */
-  public SliderClusterOperations createClusterOperations() throws
+  private SliderClusterOperations createClusterOperations() throws
                                                          YarnException,
                                                          IOException {
     if (sliderClusterOperations == null) {
@@ -2499,8 +3374,9 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
   }
 
   /**
-   * The configuration used for deployment (after resolution)
-   * @return
+   * The configuration used for deployment (after resolution).
+   * Non-null only after the client has launched the application
+   * @return the resolved configuration or null
    */
   @VisibleForTesting
   public AggregateConf getLaunchedInstanceDefinition() {
@@ -2535,8 +3411,8 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
           // treat the root directory as if if is always there
         
           if ("/".equals(path)) {
-            znodes = new HashMap<String, RegistryPathStatus>(0);
-            recordMap = new HashMap<String, ServiceRecord>(0);
+            znodes = new HashMap<>(0);
+            recordMap = new HashMap<>(0);
           } else {
             throw e;
           }
@@ -2560,7 +3436,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
           } else {
             String filename = RegistryPathUtils.lastPathEntry(name) + ".json";
             File jsonFile = new File(destDir, filename);
-            SliderUtils.write(jsonFile,
+            write(jsonFile,
                 serviceRecordMarshal.toBytes(instance),
                 true);
           }
@@ -2573,7 +3449,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
           outFile = new File(args.destdir, RegistryPathUtils.lastPathEntry(path));
         }
         if (outFile != null) {
-          SliderUtils.write(outFile, serviceRecordMarshal.toBytes(instance), true);
+          write(outFile, serviceRecordMarshal.toBytes(instance), true);
         } else {
           println(serviceRecordMarshal.toJson(instance));
         }
@@ -2604,12 +3480,12 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       } else if (registryArgs.listExports) {
         // list the exports
         actionRegistryListExports(registryArgs);
-      } else if (SliderUtils.isSet(registryArgs.getConf)) {
+      } else if (isSet(registryArgs.getConf)) {
         // get a configuration
         PublishedConfiguration publishedConfiguration =
             actionRegistryGetConfig(registryArgs);
         outputConfig(publishedConfiguration, registryArgs);
-      } else if (SliderUtils.isSet(registryArgs.getExport)) {
+      } else if (isSet(registryArgs.getExport)) {
         // get a export group
         PublishedExports publishedExports =
             actionRegistryGetExport(registryArgs);
@@ -2621,11 +3497,11 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       }
 //      JDK7
     } catch (FileNotFoundException e) {
-      log.info("{}", e);
+      log.info("{}", e.toString());
       log.debug("{}", e, e);
       return EXIT_NOT_FOUND;
     } catch (PathNotFoundException e) {
-      log.info("{}", e);
+      log.info("{}", e.toString());
       log.debug("{}", e, e);
       return EXIT_NOT_FOUND;
     }
@@ -2649,10 +3525,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     RegistryOperations operations = getRegistryOperations();
     Collection<ServiceRecord> serviceRecords;
     if (StringUtils.isEmpty(name)) {
-      String path =
-          serviceclassPath(
-              currentUser(),
-              serviceType);
+      String path = serviceclassPath(currentUser(), serviceType);
 
       try {
         Map<String, ServiceRecord> recordMap =
@@ -2667,7 +3540,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       }
     } else {
       ServiceRecord instance = lookupServiceRecord(registryArgs);
-      serviceRecords = new ArrayList<ServiceRecord>(1);
+      serviceRecords = new ArrayList<>(1);
       serviceRecords.add(instance);
     }
 
@@ -2710,18 +3583,15 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     // application name after --application option and member variable
     // cluster name has to be put behind action
     String clusterName = diagnosticArgs.name;
-    if(SliderUtils.isUnset(clusterName)){
-      throw new BadCommandArgumentsException("application name must be provided with --name option");
-    }
-    
+    requireArgumentSet(Arguments.ARG_NAME, clusterName);
+
     try {
-      SliderUtils.validateClientConfigFile();
+      validateClientConfigFile();
       log.info("Slider-client.xml is accessible");
     } catch (IOException e) {
       // we are catching exceptions here because those are indication of
       // validation result, and we need to print them here
-      log.error(
-          "validation of slider-client.xml fails because: " + e.toString(), e);
+      log.error("validation of slider-client.xml fails because: " + e, e);
       return;
     }
     SliderClusterOperations clusterOperations = createClusterOperations(clusterName);
@@ -2730,11 +3600,11 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
         .getClusterDescription();
     log.info("Slider AppMaster is accessible");
 
-    if (clusterDescription.state == ClusterDescription.STATE_LIVE) {
+    if (clusterDescription.state == StateValues.STATE_LIVE) {
       AggregateConf instanceDefinition = clusterOperations
           .getInstanceDefinition();
       String imagePath = instanceDefinition.getInternalOperations().get(
-          InternalKeys.INTERNAL_APPLICATION_IMAGE_PATH);
+          INTERNAL_APPLICATION_IMAGE_PATH);
       // if null, that means slider uploaded the agent tarball for the user
       // and we need to use where slider has put
       if (imagePath == null) {
@@ -2745,27 +3615,27 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
             + "/agent");
         imagePath = subPath.toString();
       }
+      String pathStr = imagePath + "/" + AGENT_TAR;
       try {
-        SliderUtils.validateHDFSFile(sliderFileSystem, imagePath + "/" + AGENT_TAR);
+        validateHDFSFile(sliderFileSystem, pathStr);
         log.info("Slider agent package is properly installed");
       } catch (FileNotFoundException e) {
-        log.error("can not find agent package: " + e.toString());
+        log.error("can not find agent package: {}", pathStr);
+        log.debug("can not find agent package: {}", pathStr, e);
         return;
       } catch (IOException e) {
-        log.error("can not open agent package: " + e.toString());
+        log.error("can not open agent package: {}", pathStr, e);
         return;
       }
-      String pkgTarballPath = instanceDefinition.getAppConfOperations()
-          .getGlobalOptions().getMandatoryOption(AgentKeys.APP_DEF);
+      String pkgTarballPath = getApplicationDefinitionPath(instanceDefinition
+              .getAppConfOperations());
       try {
-        SliderUtils.validateHDFSFile(sliderFileSystem, pkgTarballPath);
+        validateHDFSFile(sliderFileSystem, pkgTarballPath);
         log.info("Application package is properly installed");
       } catch (FileNotFoundException e) {
-        log.error("can not find application package: {}", e);
-        return;
+        log.error("can not find application package: {}", pkgTarballPath,  e);
       } catch (IOException e) {
-        log.error("can not open application package: {} ", e);
-        return;
+        log.error("can not open application package: {} ", pkgTarballPath, e);
       }
     }
   }
@@ -2782,11 +3652,10 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
 
   private void actionDiagnosticCredentials() throws BadConfigException,
       IOException {
-    if (SliderUtils.isHadoopClusterSecure(SliderUtils
-        .loadClientConfigurationResource())) {
+    if (isHadoopClusterSecure(loadSliderClientXML())) {
       String credentialCacheFileDescription = null;
       try {
-        credentialCacheFileDescription = SliderUtils.checkCredentialCacheFile();
+        credentialCacheFileDescription = checkCredentialCacheFile();
       } catch (BadConfigException e) {
         log.error("The credential config is not valid: " + e.toString());
         throw e;
@@ -2848,25 +3717,12 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     // application name after --application option and member variable
     // cluster name has to be put behind action
     String clusterName = diagnosticArgs.name;
-    if(SliderUtils.isUnset(clusterName)){
+    if(isUnset(clusterName)){
       throw new BadCommandArgumentsException("application name must be provided with --name option");
     }
-    SliderClusterOperations clusterOperations;
-    AggregateConf instanceDefinition = null;
-    try {
-      clusterOperations = createClusterOperations(clusterName);
-      instanceDefinition = clusterOperations.getInstanceDefinition();
-    } catch (YarnException e) {
-      log.error("Exception happened when retrieving instance definition from YARN: "
-          + e.toString());
-      throw e;
-    } catch (IOException e) {
-      log.error("Network problem happened when retrieving instance definition from YARN: "
-          + e.toString());
-      throw e;
-    }
+    AggregateConf instanceDefinition = fetchInstanceDefinition(clusterName);
     String imagePath = instanceDefinition.getInternalOperations().get(
-        InternalKeys.INTERNAL_APPLICATION_IMAGE_PATH);
+        INTERNAL_APPLICATION_IMAGE_PATH);
     // if null, it will be uploaded by Slider and thus at slider's path
     if (imagePath == null) {
       ApplicationReport appReport = findInstance(clusterName);
@@ -2878,58 +3734,54 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
     log.info("The path of slider agent tarball on HDFS is: " + imagePath);
   }
 
+  private AggregateConf fetchInstanceDefinition(String clusterName)
+      throws YarnException, IOException {
+    SliderClusterOperations clusterOperations;
+    AggregateConf instanceDefinition = null;
+    try {
+      clusterOperations = createClusterOperations(clusterName);
+      instanceDefinition = clusterOperations.getInstanceDefinition();
+    } catch (YarnException | IOException e) {
+      log.error("Failed to retrieve instance definition from YARN: "
+          + e.toString());
+      throw e;
+    }
+    return instanceDefinition;
+  }
+
   private void actionDiagnosticApplication(ActionDiagnosticArgs diagnosticArgs)
       throws YarnException, IOException {
     // not using member variable clustername because we want to place
     // application name after --application option and member variable
     // cluster name has to be put behind action
     String clusterName = diagnosticArgs.name;
-    if(SliderUtils.isUnset(clusterName)){
-      throw new BadCommandArgumentsException("application name must be provided with --name option");
-    }
-    SliderClusterOperations clusterOperations;
-    AggregateConf instanceDefinition = null;
-    try {
-      clusterOperations = createClusterOperations(clusterName);
-      instanceDefinition = clusterOperations.getInstanceDefinition();
-    } catch (YarnException e) {
-      log.error("Exception happened when retrieving instance definition from YARN: "
-          + e.toString());
-      throw e;
-    } catch (IOException e) {
-      log.error("Network problem happened when retrieving instance definition from YARN: "
-          + e.toString());
-      throw e;
-    }
+    requireArgumentSet(Arguments.ARG_NAME, clusterName);
+    AggregateConf instanceDefinition = fetchInstanceDefinition(clusterName);
     String clusterDir = instanceDefinition.getAppConfOperations()
         .getGlobalOptions().get(AgentKeys.APP_ROOT);
-    String pkgTarball = instanceDefinition.getAppConfOperations()
-        .getGlobalOptions().get(AgentKeys.APP_DEF);
+    String pkgTarball = getApplicationDefinitionPath(instanceDefinition.getAppConfOperations());
     String runAsUser = instanceDefinition.getAppConfOperations()
         .getGlobalOptions().get(AgentKeys.RUNAS_USER);
 
-    log.info("The location of the cluster instance directory in HDFS is: "
-        + clusterDir);
-    log.info("The name of the application package tarball on HDFS is: "
-        + pkgTarball);
-    log.info("The runas user of the application in the cluster is: "
-        + runAsUser);
+    log.info("The location of the cluster instance directory in HDFS is: {}", clusterDir);
+    log.info("The name of the application package tarball on HDFS is: {}",pkgTarball);
+    log.info("The runas user of the application in the cluster is: {}",runAsUser);
 
     if (diagnosticArgs.verbose) {
-      log.info("App config of the application: "
-          + instanceDefinition.getAppConf().toJson());
-      log.info("Resource config of the application: "
-          + instanceDefinition.getResources().toJson());
+      log.info("App config of the application:\n{}",
+          instanceDefinition.getAppConf().toJson());
+      log.info("Resource config of the application:\n{}",
+          instanceDefinition.getResources().toJson());
     }
   }
 
   private void actionDiagnosticClient(ActionDiagnosticArgs diagnosticArgs)
       throws SliderException, IOException {
     try {
-      String currentCommandPath = SliderUtils.getCurrentCommandPath();
+      String currentCommandPath = getCurrentCommandPath();
       SliderVersionInfo.loadAndPrintVersionInfo(log);
-      String clientConfigPath = SliderUtils.getClientConfigPath();
-      String jdkInfo = SliderUtils.getJDKInfo();
+      String clientConfigPath = getClientConfigPath();
+      String jdkInfo = getJDKInfo();
       println("The slider command path: %s", currentCommandPath);
       println("The slider-client.xml used by current running command path: %s",
           clientConfigPath);
@@ -2937,7 +3789,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
 
       // security info
       Configuration config = getConfig();
-      if (SliderUtils.isHadoopClusterSecure(config)) {
+      if (isHadoopClusterSecure(config)) {
         println("Hadoop Cluster is secure");
         println("Login user is %s", UserGroupInformation.getLoginUser());
         println("Current user is %s", UserGroupInformation.getCurrentUser());
@@ -2949,7 +3801,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       // verbose?
       if (diagnosticArgs.verbose) {
         // do the environment
-        Map<String, String> env = System.getenv();
+        Map<String, String> env = getSystemEnv();
         Set<String> envList = ConfigHelper.sortedConfigKeys(env.entrySet());
         StringBuilder builder = new StringBuilder("Environment variables:\n");
         for (String key : envList) {
@@ -2960,7 +3812,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
         // Java properties
         builder = new StringBuilder("JVM Properties\n");
         Map<String, String> props =
-            SliderUtils.sortedMap(SliderUtils.toMap(System.getProperties()));
+            sortedMap(toMap(System.getProperties()));
         for (Entry<String, String> entry : props.entrySet()) {
           builder.append(entry.getKey()).append("=")
                  .append(entry.getValue()).append("\n");
@@ -2969,16 +3821,11 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
         println(builder.toString());
 
         // then the config
-        println("Slider client configuration:\n"
-                + ConfigHelper.dumpConfigToString(config));
-        
+        println("Slider client configuration:\n" + ConfigHelper.dumpConfigToString(config));
       }
 
-      SliderUtils.validateSliderClientEnvironment(log);
-    } catch (SliderException e) {
-      log.error(e.toString());
-      throw e;
-    } catch (IOException e) {
+      validateSliderClientEnvironment(log);
+    } catch (SliderException | IOException e) {
       log.error(e.toString());
       throw e;
     }
@@ -3023,7 +3870,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
 
     ServiceRecord instance = lookupServiceRecord(registryArgs);
 
-    RegistryRetriever retriever = new RegistryRetriever(instance);
+    RegistryRetriever retriever = new RegistryRetriever(getConfig(), instance);
     PublishedConfigSet configurations =
         retriever.getConfigurations(!registryArgs.internal);
     PrintStream out = null;
@@ -3063,7 +3910,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       throws YarnException, IOException {
     ServiceRecord instance = lookupServiceRecord(registryArgs);
 
-    RegistryRetriever retriever = new RegistryRetriever(instance);
+    RegistryRetriever retriever = new RegistryRetriever(getConfig(), instance);
     PublishedExportsSet exports =
         retriever.getExports(!registryArgs.internal);
     PrintStream out = null;
@@ -3111,7 +3958,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       throws YarnException, IOException {
     ServiceRecord instance = lookupServiceRecord(registryArgs);
 
-    RegistryRetriever retriever = new RegistryRetriever(instance);
+    RegistryRetriever retriever = new RegistryRetriever(getConfig(), instance);
     boolean external = !registryArgs.internal;
     PublishedConfigSet configurations =
         retriever.getConfigurations(external);
@@ -3136,10 +3983,9 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       throws YarnException, IOException {
     ServiceRecord instance = lookupServiceRecord(registryArgs);
 
-    RegistryRetriever retriever = new RegistryRetriever(instance);
+    RegistryRetriever retriever = new RegistryRetriever(getConfig(), instance);
     boolean external = !registryArgs.internal;
-    PublishedExportsSet exports =
-        retriever.getExports(external);
+    PublishedExportsSet exports = retriever.getExports(external);
 
     PublishedExports published = retriever.retrieveExports(exports,
                                                            registryArgs.getExport,
@@ -3275,9 +4121,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       throws IOException, SliderException {
     try {
       return getRegistryOperations().resolve(path);
-    } catch (PathNotFoundException e) {
-      throw new NotFoundException(e.getPath().toString(), e);
-    } catch (NoRecordException e) {
+    } catch (PathNotFoundException | NoRecordException e) {
       throw new NotFoundException(e.getPath().toString(), e);
     }
   }
@@ -3311,11 +4155,12 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       Map<String, ServiceRecord> recordMap = listServiceRecords(
           getRegistryOperations(),
           serviceclassPath(currentUser(), SliderKeys.APP_TYPE));
-      return new ArrayList<String>(recordMap.keySet());
-/// JDK7    } catch (YarnException | IOException e) {
-    } catch (IOException e) {
-      throw e;
-    } catch (YarnException e) {
+      return new ArrayList<>(recordMap.keySet());
+    } catch (PathNotFoundException e) {
+      log.debug("No registry path for slider instances for current user: {}", e, e);
+      // no entries: return an empty list
+      return new ArrayList<>(0);
+    } catch (IOException | YarnException e) {
       throw e;
     } catch (Exception e) {
       throw new IOException(e);
@@ -3349,7 +4194,7 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
    */
   @SuppressWarnings("UseOfSystemOutOrSystemErr")
   private static void print(CharSequence src) {
-    System.out.append(src);
+    clientOutputStream.append(src);
   }
 
   /**
@@ -3395,12 +4240,131 @@ public class SliderClient extends AbstractSliderLaunchedService implements RunSe
       }
     } catch (IllegalArgumentException e) {
       throw new BadCommandArgumentsException(e, "%s : %s", args, e);
-    } catch (ApplicationAttemptNotFoundException notFound) {
-      throw new NotFoundException(notFound, notFound.toString());
-    } catch (ApplicationNotFoundException notFound) {
+    } catch (ApplicationAttemptNotFoundException | ApplicationNotFoundException notFound) {
       throw new NotFoundException(notFound, notFound.toString());
     }
     return EXIT_SUCCESS;
+  }
+
+  @Override
+  public int actionDependency(ActionDependencyArgs args) throws IOException,
+      YarnException {
+    // check to ensure if the current user is hdfs
+    String currentUser = getUsername();
+    String hdfsUser = "hdfs";
+    if (!hdfsUser.equalsIgnoreCase(currentUser)) {
+      log.error("Please run this command as user {}", hdfsUser);
+      return EXIT_FALSE;
+    }
+    
+    String version = getSliderVersion();
+    Path dependencyLibTarGzip = sliderFileSystem.getDependencyTarGzip();
+    
+    // Check if dependency has already been uploaded, in which case log
+    // appropriately and exit success (unless overwrite has been requested)
+    if (sliderFileSystem.isFile(dependencyLibTarGzip) && !args.overwrite) {
+      println(String.format(
+          "Dependency libs are already uploaded to %s. Use %s "
+              + "if you want to re-upload", dependencyLibTarGzip.toUri(),
+          Arguments.ARG_OVERWRITE));
+      return EXIT_SUCCESS;
+    }
+    
+    String libDir = System.getProperty(SliderKeys.PROPERTY_LIB_DIR);
+    if (isSet(libDir)) {
+      File srcFolder = new File(libDir);
+      File tempLibTarGzipFile = File.createTempFile(
+          SliderKeys.SLIDER_DEPENDENCY_TAR_GZ_FILE_NAME + "_",
+          SliderKeys.SLIDER_DEPENDENCY_TAR_GZ_FILE_EXT);
+      // copy all jars except slider-core-<version>.jar
+      tarGzipFolder(srcFolder, tempLibTarGzipFile, createJarFilter());
+
+      log.info("Uploading dependency for AM (version {}) from {} to {}",
+          version, tempLibTarGzipFile.toURI(), dependencyLibTarGzip.toUri());
+      sliderFileSystem.copyLocalFileToHdfs(tempLibTarGzipFile,
+          dependencyLibTarGzip, new FsPermission(
+              SliderKeys.SLIDER_DEPENDENCY_DIR_PERMISSIONS));
+      return EXIT_SUCCESS;
+    } else {
+      return EXIT_FALSE;
+    }
+  }
+
+  private int actionHelp(String actionName) throws YarnException, IOException {
+    throw new UsageException(CommonArgs.usage(serviceArgs, actionName));
+  }
+
+  private int actionHelp(String errMsg, String actionName)
+      throws YarnException, IOException {
+    throw new UsageException("%s %s", errMsg, CommonArgs.usage(serviceArgs,
+        actionName));
+  }
+
+  /**
+   * List the nodes in the cluster, possibly filtering by node state or label.
+   *
+   * @param args argument list
+   * @return a possibly empty list of nodes in the cluster
+   * @throws IOException IO problems
+   * @throws YarnException YARN problems
+   */
+  @Override
+  public NodeInformationList listYarnClusterNodes(ActionNodesArgs args)
+    throws YarnException, IOException {
+    return yarnClient.listNodes(args.label, args.healthy);
+  }
+
+  /**
+   * List the nodes in the cluster, possibly filtering by node state or label.
+   *
+   * @param args argument list
+   * @return a possibly empty list of nodes in the cluster
+   * @throws IOException IO problems
+   * @throws YarnException YARN problems
+   */
+  public NodeInformationList listInstanceNodes(String instance, ActionNodesArgs args)
+    throws YarnException, IOException {
+    // TODO
+    log.info("listInstanceNodes {}", instance);
+    SliderClusterOperations clusterOps =
+      new SliderClusterOperations(bondToCluster(instance));
+    return clusterOps.getLiveNodes();
+  }
+
+  /**
+   * List the nodes in the cluster, possibly filtering by node state or label.
+   * Prints them to stdout unless the args names a file instead.
+   * @param args argument list
+   * @throws IOException IO problems
+   * @throws YarnException YARN problems
+   */
+  public int actionNodes(String instance, ActionNodesArgs args) throws YarnException, IOException {
+
+    args.instance = instance;
+    NodeInformationList nodes;
+    if (SliderUtils.isUnset(instance)) {
+      nodes = listYarnClusterNodes(args);
+    } else {
+      nodes = listInstanceNodes(instance, args);
+    }
+    log.debug("Node listing for {} has {} nodes", args, nodes.size());
+    JsonSerDeser<NodeInformationList> serDeser = NodeInformationList.createSerializer();
+    if (args.outputFile != null) {
+      serDeser.save(nodes, args.outputFile);
+    } else {
+      println(serDeser.toJson(nodes));
+    }
+    return 0;
+  }
+
+  /**
+   * Create a new IPC client for talking to slider via what follows the REST API.
+   * Client must already be bonded to the cluster
+   * @return a new IPC client
+   */
+  public SliderApplicationApi createIpcClient()
+    throws IOException, YarnException {
+    return new SliderApplicationIpcClient(createClusterOperations());
   }
 }
 

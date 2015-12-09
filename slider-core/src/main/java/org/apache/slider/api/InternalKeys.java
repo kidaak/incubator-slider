@@ -69,6 +69,14 @@ public interface InternalKeys {
    */
   String INTERNAL_DATA_DIR_PATH = "internal.data.dir.path";
   /**
+   * where the app def is stored
+   */
+  String INTERNAL_APPDEF_DIR_PATH = "internal.appdef.dir.path";
+  /**
+   * where addons for the app are stored
+   */
+  String INTERNAL_ADDONS_DIR_PATH = "internal.addons.dir.path";
+  /**
    * Time in milliseconds to wait after forking any in-AM 
    * process before attempting to start up the containers: {@value}
    *
@@ -89,6 +97,7 @@ public interface InternalKeys {
    * Default short life threshold: {@value}
    */
   int DEFAULT_INTERNAL_CONTAINER_FAILURE_SHORTLIFE = 60;
+  
   /**
    * Version of the app: {@value}
    */
@@ -177,5 +186,14 @@ public interface InternalKeys {
    * 100% for chaos values
    */
   int PROBABILITY_PERCENT_100 = 100 * PROBABILITY_PERCENT_1;
-  
+
+  /**
+   * interval between checks for escalation: {@value}
+   */
+  String ESCALATION_CHECK_INTERVAL = "escalation.check.interval.seconds";
+
+  /**
+   * default value: {@value}
+   */
+  int DEFAULT_ESCALATION_CHECK_INTERVAL = 30;
 }

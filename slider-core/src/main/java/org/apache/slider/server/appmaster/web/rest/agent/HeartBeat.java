@@ -18,7 +18,6 @@
 
 package org.apache.slider.server.appmaster.web.rest.agent;
 
-import org.apache.slider.providers.agent.State;
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 import org.codehaus.jackson.annotate.JsonProperty;
 import org.codehaus.jackson.map.annotate.JsonSerialize;
@@ -45,6 +44,7 @@ public class HeartBeat {
   HostStatus nodeStatus;
   private AgentEnv agentEnv = null;
   private String fqdn;
+  private String pkg;
 
   public long getResponseId() {
     return responseId;
@@ -124,6 +124,16 @@ public class HeartBeat {
     this.mounts = mounts;
   }
 
+  @JsonProperty("package")
+  public String getPkg() {
+    return pkg;
+  }
+
+  @JsonProperty("package")
+  public void setPkg(String pkg) {
+    this.pkg = pkg;
+  }
+
   @Override
   public String toString() {
     return "HeartBeat{" +
@@ -132,6 +142,7 @@ public class HeartBeat {
            ", hostname='" + hostname + '\'' +
            ", reports=" + reports +
            ", componentStatus=" + componentStatus +
+           ", package=" + pkg +
            ", nodeStatus=" + nodeStatus +
            '}';
   }

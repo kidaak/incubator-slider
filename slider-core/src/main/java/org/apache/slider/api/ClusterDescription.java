@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.slider.api.types.ApplicationLivenessInformation;
 import org.apache.slider.common.tools.SliderUtils;
 import org.apache.slider.core.exceptions.BadConfigException;
 import org.apache.slider.providers.SliderProviderFactory;
@@ -64,6 +65,12 @@ import static org.apache.slider.api.OptionKeys.ZOOKEEPER_QUORUM;
  * As a wire format it is less efficient in both xfer and ser/deser than 
  * a binary format, but by having one unified format for wire and persistence,
  * the code paths are simplified.
+ *
+ * This was the original single-file specification/model used in the Hoya
+ * precursor to Slider. Its now retained primarily as a way to publish
+ * the current state of the application, or at least a fraction thereof ...
+ * the larger set of information from the REST API is beyond the scope of
+ * this structure.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
@@ -107,28 +114,28 @@ public class ClusterDescription implements Cloneable {
    * Specification is incomplete & cannot
    * be used: {@value}
    */
-  public static final int STATE_INCOMPLETE = 0;
+  public static final int STATE_INCOMPLETE = StateValues.STATE_INCOMPLETE;
 
   /**
    * Spec has been submitted: {@value}
    */
-  public static final int STATE_SUBMITTED = 1;
+  public static final int STATE_SUBMITTED = StateValues.STATE_SUBMITTED;
   /**
    * Cluster created: {@value}
    */
-  public static final int STATE_CREATED = 2;
+  public static final int STATE_CREATED = StateValues.STATE_CREATED;
   /**
    * Live: {@value}
    */
-  public static final int STATE_LIVE = 3;
+  public static final int STATE_LIVE = StateValues.STATE_LIVE;
   /**
    * Stopped
    */
-  public static final int STATE_STOPPED = 4;
+  public static final int STATE_STOPPED = StateValues.STATE_STOPPED;
   /**
    * destroyed
    */
-  public static final int STATE_DESTROYED = 5;
+  public static final int STATE_DESTROYED = StateValues.STATE_DESTROYED;
   
   /**
    * When was the cluster specification created?
@@ -164,54 +171,52 @@ public class ClusterDescription implements Cloneable {
    * cluster-specific options -to control both
    * the Slider AM and the application that it deploys
    */
-  public Map<String, String> options =
-    new HashMap<String, String>();
+  public Map<String, String> options = new HashMap<>();
 
   /**
    * cluster information
    * This is only valid when querying the cluster status.
    */
-  public Map<String, String> info =
-    new HashMap<String, String>();
+  public Map<String, String> info = new HashMap<>();
 
   /**
    * Statistics. This is only relevant when querying the cluster status
    */
-  public Map<String, Map<String, Integer>> statistics =
-    new HashMap<String, Map<String, Integer>>();
+  public Map<String, Map<String, Integer>> statistics = new HashMap<>();
 
   /**
    * Instances: role->count
    */
-  public Map<String, List<String>> instances =
-    new HashMap<String, List<String>>();
+  public Map<String, List<String>> instances = new HashMap<>();
 
   /**
    * Role options, 
    * role -> option -> value
    */
-  public Map<String, Map<String, String>> roles =
-    new HashMap<String, Map<String, String>>();
+  public Map<String, Map<String, String>> roles = new HashMap<>();
 
 
   /**
    * List of key-value pairs to add to a client config to set up the client
    */
-  public Map<String, String> clientProperties =
-    new HashMap<String, String>();
+  public Map<String, String> clientProperties = new HashMap<>();
 
   /**
    * Status information
    */
   public Map<String, Object> status;
-  
+
+  /**
+   * Liveness information; the same as returned
+   * on the <code>live/liveness/</code> URL
+   */
+  public ApplicationLivenessInformation liveness;
 
   /**
    * Creator.
    */
   public ClusterDescription() {
   }
-
 
   @Override
   public String toString() {
@@ -267,7 +272,7 @@ public class ClusterDescription implements Cloneable {
   public void save(File file) throws IOException {
     log.debug("Saving to {}", file.getAbsolutePath());
     if (!file.getParentFile().mkdirs()) {
-      log.warn("Failed to mkdirs for " + file.getParentFile());
+      log.warn("Failed to mkdirs for {}", file.getParentFile());
     }
     DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(file));
     writeJsonAsBytes(dataOutputStream);
@@ -278,8 +283,8 @@ public class ClusterDescription implements Cloneable {
    * @param dataOutputStream an outout stream that will always be closed
    * @throws IOException any failure
    */
-  private void writeJsonAsBytes(DataOutputStream dataOutputStream) throws
-                                                                   IOException {
+  private void writeJsonAsBytes(DataOutputStream dataOutputStream)
+      throws IOException {
     try {
       String json = toJsonString();
       byte[] b = json.getBytes(UTF_8);
@@ -297,7 +302,7 @@ public class ClusterDescription implements Cloneable {
    * @throws IOException IO problems
    */
   public static ClusterDescription load(FileSystem fs, Path path)
-    throws IOException, JsonParseException, JsonMappingException {
+      throws IOException, JsonParseException, JsonMappingException {
     FileStatus status = fs.getFileStatus(path);
     byte[] b = new byte[(int) status.getLen()];
     FSDataInputStream dataInputStream = fs.open(path);
@@ -365,7 +370,7 @@ public class ClusterDescription implements Cloneable {
         try {
             return mapper.readValue(is, ClusterDescription.class);
         } catch (IOException e) {
-            log.error("Exception while parsing input stream : " + e, e);
+            log.error("Exception while parsing input stream : {}", e, e);
       throw e;
     }
   }
@@ -383,7 +388,7 @@ public class ClusterDescription implements Cloneable {
     try {
       return mapper.readValue(jsonFile, ClusterDescription.class);
     } catch (IOException e) {
-      log.error("Exception while parsing json file {}: {}" , jsonFile, e);
+      log.error("Exception while parsing json file {}" , jsonFile, e);
       throw e;
     }
   }
@@ -431,9 +436,9 @@ public class ClusterDescription implements Cloneable {
   /**
    * Get a cluster option or value
    *
-   * @param key
-   * @param defVal
-   * @return
+   * @param key option key
+   * @param defVal option val
+   * @return resolved value or default
    */
   public String getOption(String key, String defVal) {
     String val = options.get(key);
@@ -443,7 +448,7 @@ public class ClusterDescription implements Cloneable {
   /**
    * Get a cluster option or value
    *
-   * @param key
+   * @param key mandatory key
    * @return the value
    * @throws BadConfigException if the option is missing
    */
@@ -471,7 +476,7 @@ public class ClusterDescription implements Cloneable {
 
   /**
    * Verify that an option is set: that is defined AND non-empty
-   * @param key
+   * @param key key to verify
    * @throws BadConfigException
    */
   public void verifyOptionSet(String key) throws BadConfigException {
@@ -522,20 +527,20 @@ public class ClusterDescription implements Cloneable {
     }
     String val = roleopts.get(option);
     if (val == null) {
-      throw new BadConfigException("Missing option '%s' in role %s ", option,
-                                   role);
+      throw new BadConfigException("Missing option '%s' in role %s ", option, role);
     }
     return val;
   }
-    /**
+
+  /**
    * Get a mandatory integer role option
    * @param role role to get from
    * @param option option name
    * @return resolved value
    * @throws BadConfigException if the option is not defined
    */
-  public int getMandatoryRoleOptInt(String role, String option) throws
-                                                                BadConfigException {
+  public int getMandatoryRoleOptInt(String role, String option)
+      throws BadConfigException {
     getMandatoryRoleOpt(role, option);
     return getRoleOptInt(role, option, 0);
   }
@@ -558,7 +563,7 @@ public class ClusterDescription implements Cloneable {
   public Map<String, String> getOrAddRole(String role) {
     Map<String, String> map = getRole(role);
     if (map == null) {
-      map = new HashMap<String, String>();
+      map = new HashMap<>();
     }
     roles.put(role, map);
     return map;
@@ -569,7 +574,7 @@ public class ClusterDescription implements Cloneable {
    */
   @JsonIgnore
   public Set<String> getRoleNames() {
-    return new HashSet<String>(roles.keySet());
+    return new HashSet<>(roles.keySet());
   }
 
   /**
@@ -588,7 +593,7 @@ public class ClusterDescription implements Cloneable {
   }
 
   /**
-   * Get a role opt; use {@link Integer#decode(String)} so as to take hex
+   * Get an integer role option; use {@link Integer#decode(String)} so as to take hex
    * oct and bin values too.
    *
    * @param role role to get from
@@ -600,6 +605,21 @@ public class ClusterDescription implements Cloneable {
   public int getRoleOptInt(String role, String option, int defVal) {
     String val = getRoleOpt(role, option, Integer.toString(defVal));
     return Integer.decode(val);
+  }
+
+  /**
+   * Get an integer role option; use {@link Integer#decode(String)} so as to take hex
+   * oct and bin values too.
+   *
+   * @param role role to get from
+   * @param option option name
+   * @param defVal default value
+   * @return parsed value
+   * @throws NumberFormatException if the role could not be parsed.
+   */
+  public long getRoleOptLong(String role, String option, long defVal) {
+    String val = getRoleOpt(role, option, Long.toString(defVal));
+    return Long.decode(val);
   }
 
   /**
@@ -621,6 +641,17 @@ public class ClusterDescription implements Cloneable {
    */
   public void setRoleOpt(String role, String option, int val) {
     setRoleOpt(role, option, Integer.toString(val));
+  }
+
+  /**
+   * Set a role option of any object, using its string value.
+   * This works for (Boxed) numeric values as well as other objects
+   * @param role role name
+   * @param option option name
+   * @param val non-null value
+   */
+  public void setRoleOpt(String role, String option, Object val) {
+    setRoleOpt(role, option, val.toString());
   }
 
   /**

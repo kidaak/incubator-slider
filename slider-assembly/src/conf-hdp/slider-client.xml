@@ -37,6 +37,14 @@
     </property>
 
     <property>
+<<<<<<< HEAD
+=======
+      <name>yarn.log-aggregation-enable</name>
+      <value>true</value>
+    </property>
+
+    <property>
+>>>>>>> refs/remotes/apache/develop
         <name>slider.security.protocol.acl</name>
       <value>*</value>
       <description>When security is enabled, set appropriate acl. Default value means allow everyone.</description>
@@ -77,5 +85,10 @@
       <value>hdfs/master@MINICLUSTER</value>
     </property>
   -->
+
+    <property>
+      <name>slider.am.launch.env</name>
+      <value>LD_LIBRARY_PATH=/usr/hdp/${hdp.version}/hadoop/lib/native:/usr/hdp/${hdp.version}/hadoop/lib/native/Linux-amd64-64</value>
+    </property>
 
 </configuration>

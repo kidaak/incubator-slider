@@ -20,6 +20,7 @@ package org.apache.slider.providers.agent;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -37,7 +38,6 @@ import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.LocalResource;
 import org.apache.hadoop.yarn.api.records.LocalResourceType;
 import org.apache.slider.api.ClusterDescription;
-import org.apache.slider.api.ClusterDescriptionKeys;
 import org.apache.slider.api.ClusterNode;
 import org.apache.slider.api.InternalKeys;
 import org.apache.slider.api.OptionKeys;
@@ -65,17 +65,22 @@ import org.apache.slider.providers.AbstractProviderService;
 import org.apache.slider.providers.ProviderCore;
 import org.apache.slider.providers.ProviderRole;
 import org.apache.slider.providers.ProviderUtils;
+import org.apache.slider.providers.agent.application.metadata.AbstractComponent;
 import org.apache.slider.providers.agent.application.metadata.Application;
 import org.apache.slider.providers.agent.application.metadata.CommandScript;
 import org.apache.slider.providers.agent.application.metadata.Component;
+import org.apache.slider.providers.agent.application.metadata.ComponentCommand;
 import org.apache.slider.providers.agent.application.metadata.ComponentExport;
+import org.apache.slider.providers.agent.application.metadata.ComponentsInAddonPackage;
 import org.apache.slider.providers.agent.application.metadata.ConfigFile;
 import org.apache.slider.providers.agent.application.metadata.DefaultConfig;
+import org.apache.slider.providers.agent.application.metadata.DockerContainer;
 import org.apache.slider.providers.agent.application.metadata.Export;
 import org.apache.slider.providers.agent.application.metadata.ExportGroup;
 import org.apache.slider.providers.agent.application.metadata.Metainfo;
 import org.apache.slider.providers.agent.application.metadata.OSPackage;
 import org.apache.slider.providers.agent.application.metadata.OSSpecific;
+import org.apache.slider.providers.agent.application.metadata.Package;
 import org.apache.slider.providers.agent.application.metadata.PropertyInfo;
 import org.apache.slider.server.appmaster.actions.ProviderReportedContainerLoss;
 import org.apache.slider.server.appmaster.actions.RegisterComponentInstance;
@@ -94,6 +99,8 @@ import org.apache.slider.server.appmaster.web.rest.agent.RegistrationResponse;
 import org.apache.slider.server.appmaster.web.rest.agent.RegistrationStatus;
 import org.apache.slider.server.appmaster.web.rest.agent.StatusCommand;
 import org.apache.slider.server.services.security.CertificateManager;
+import org.apache.slider.server.services.security.SecurityStore;
+import org.apache.slider.server.services.security.StoresGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -113,12 +120,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Scanner;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
 
 import static org.apache.slider.server.appmaster.web.rest.RestPaths.SLIDER_PATH_AGENTS;
 
@@ -154,13 +164,16 @@ public class AgentProviderService extends AbstractProviderService implements
   private int heartbeatMonitorInterval = 0;
   private AgentClientProvider clientProvider;
   private AtomicInteger taskId = new AtomicInteger(0);
-  private volatile Metainfo metainfo = null;
+  private volatile Metainfo metaInfo = null;
   private Map<String, DefaultConfig> defaultConfigs = null;
   private ComponentCommandOrder commandOrder = null;
   private HeartbeatMonitor monitor;
   private Boolean canAnyMasterPublish = null;
   private AgentLaunchParameter agentLaunchParameter = null;
   private String clusterName = null;
+  private boolean isInUpgradeMode;
+  private Set<String> upgradeContainers = new HashSet<String>();
+  private boolean appStopInitiated;
 
   private final Map<String, ComponentInstanceState> componentStatuses =
       new ConcurrentHashMap<String, ComponentInstanceState>();
@@ -170,6 +183,8 @@ public class AgentProviderService extends AbstractProviderService implements
       new ConcurrentHashMap<String, Map<String, List<ExportEntry>>>();
   private final Map<String, Map<String, String>> allocatedPorts =
       new ConcurrentHashMap<String, Map<String, String>>();
+  private final Map<String, Metainfo> packageMetainfo = 
+      new ConcurrentHashMap<String, Metainfo>();
 
   private final Map<String, ExportEntry> logFolderExports =
       Collections.synchronizedMap(new LinkedHashMap<String, ExportEntry>(MAX_LOG_ENTRIES, 0.75f, false) {
@@ -193,6 +208,11 @@ public class AgentProviderService extends AbstractProviderService implements
     super("AgentProviderService");
     setAgentRestOperations(this);
     setHeartbeatMonitorInterval(DEFAULT_HEARTBEAT_MONITOR_INTERVAL);
+  }
+
+  @Override
+  public String getHumanName() {
+    return "Slider Agent";
   }
 
   @Override
@@ -225,7 +245,7 @@ public class AgentProviderService extends AbstractProviderService implements
     Set<String> names = resources.getComponentNames();
     names.remove(SliderKeys.COMPONENT_AM);
     for (String name : names) {
-      Component componentDef = getMetainfo().getApplicationComponent(name);
+      Component componentDef = getMetaInfo().getApplicationComponent(name);
       if (componentDef == null) {
         throw new BadConfigException(
             "Component %s is not a member of application.", name);
@@ -251,26 +271,48 @@ public class AgentProviderService extends AbstractProviderService implements
   // Reads the metainfo.xml in the application package and loads it
   private void buildMetainfo(AggregateConf instanceDefinition,
                              SliderFileSystem fileSystem) throws IOException, SliderException {
-    String appDef = instanceDefinition.getAppConfOperations()
-        .getGlobalOptions().getMandatoryOption(AgentKeys.APP_DEF);
+    String appDef = SliderUtils.getApplicationDefinitionPath(instanceDefinition
+        .getAppConfOperations());
 
-    if (metainfo == null) {
+    if (metaInfo == null) {
       synchronized (syncLock) {
-        if (metainfo == null) {
+        if (metaInfo == null) {
           readAndSetHeartbeatMonitoringInterval(instanceDefinition);
           initializeAgentDebugCommands(instanceDefinition);
 
-          metainfo = getApplicationMetainfo(fileSystem, appDef);
-          if (metainfo == null || metainfo.getApplication() == null) {
+          metaInfo = getApplicationMetainfo(fileSystem, appDef, false);
+          log.info("Master package metainfo: {}", metaInfo.toString());
+          if (metaInfo == null || metaInfo.getApplication() == null) {
             log.error("metainfo.xml is unavailable or malformed at {}.", appDef);
             throw new SliderException(
                 "metainfo.xml is required in app package.");
           }
-          commandOrder = new ComponentCommandOrder(metainfo.getApplication()
-                                                       .getCommandOrder());
-          defaultConfigs = initializeDefaultConfigs(fileSystem, appDef, metainfo);
+          commandOrder = new ComponentCommandOrder(metaInfo.getApplication().getCommandOrders());
+          defaultConfigs = initializeDefaultConfigs(fileSystem, appDef, metaInfo);
           monitor = new HeartbeatMonitor(this, getHeartbeatMonitorInterval());
           monitor.start();
+
+          // build a map from component to metainfo
+          String addonAppDefString = instanceDefinition.getAppConfOperations()
+              .getGlobalOptions().getOption(AgentKeys.ADDONS, null);
+          log.debug("All addon appdefs: {}", addonAppDefString);
+          if (addonAppDefString != null) {
+            Scanner scanner = new Scanner(addonAppDefString).useDelimiter(",");
+            while (scanner.hasNext()) {
+              String addonAppDef = scanner.next();
+              String addonAppDefPath = instanceDefinition
+                  .getAppConfOperations().getGlobalOptions().get(addonAppDef);
+              log.debug("Addon package {} is stored at: {}", addonAppDef
+                  + addonAppDefPath);
+              Metainfo addonMetaInfo = getApplicationMetainfo(fileSystem,
+                  addonAppDefPath, true);
+              addonMetaInfo.validate();
+              packageMetainfo.put(addonMetaInfo.getApplicationPackage()
+                  .getName(), addonMetaInfo);
+            }
+            log.info("Metainfo map for master and addon: {}",
+                packageMetainfo.toString());
+          }
         }
       }
     }
@@ -296,8 +338,8 @@ public class AgentProviderService extends AbstractProviderService implements
       IOException,
       SliderException {
 
-    String appDef = instanceDefinition.getAppConfOperations().
-        getGlobalOptions().getMandatoryOption(AgentKeys.APP_DEF);
+    String appDef = SliderUtils.getApplicationDefinitionPath(instanceDefinition
+        .getAppConfOperations());
 
     initializeApplicationConfiguration(instanceDefinition, fileSystem);
 
@@ -318,6 +360,10 @@ public class AgentProviderService extends AbstractProviderService implements
     }
     // for 2-Way SSL
     launcher.setEnv(SLIDER_PASSPHRASE, instanceDefinition.getPassphrase());
+    //add english env
+    launcher.setEnv("LANG", "en_US.UTF-8");
+    launcher.setEnv("LC_ALL", "en_US.UTF-8");
+    launcher.setEnv("LANGUAGE", "en_US.UTF-8");
 
     //local resources
 
@@ -349,13 +395,21 @@ public class AgentProviderService extends AbstractProviderService implements
        agentImagePath = new Path(agentImage);
     }
 
-    // TODO: throw exception when agent tarball is not available
-
     if (fileSystem.getFileSystem().exists(agentImagePath)) {
       LocalResource agentImageRes = fileSystem.createAmResource(agentImagePath, LocalResourceType.ARCHIVE);
       launcher.addLocalResource(AgentKeys.AGENT_INSTALL_DIR, agentImageRes);
     } else {
-      log.error("Required agent image slider-agent.tar.gz is unavailable.");
+      String msg =
+          String.format("Required agent image slider-agent.tar.gz is unavailable at %s", agentImagePath.toString());
+      MapOperations compOps = instanceDefinition.
+          getAppConfOperations().getComponent(role);
+      boolean relaxVerificationForTest = compOps != null ? Boolean.valueOf(compOps.
+          getOptionBool(AgentKeys.TEST_RELAX_VERIFICATION, false)) : false;
+      log.error(msg);
+
+      if (!relaxVerificationForTest) {
+        throw new SliderException(SliderExitCodes.EXIT_DEPLOYMENT_FAILED, msg);
+      }
     }
 
     log.info("Using {} for agent.", scriptPath);
@@ -394,6 +448,13 @@ public class AgentProviderService extends AbstractProviderService implements
       localizeContainerSSLResources(launcher, container, fileSystem);
     }
 
+    MapOperations compOps = instanceDefinition.
+        getAppConfOperations().getComponent(role);
+    if (areStoresRequested(compOps)) {
+      localizeContainerSecurityStores(launcher, container, role, fileSystem,
+                                      instanceDefinition);
+    }
+
     //add the configuration resources
     launcher.addLocalResources(fileSystem.submitDirectory(
         generatedConfPath,
@@ -421,16 +482,91 @@ public class AgentProviderService extends AbstractProviderService implements
       operation.add(debugCmd);
     }
 
-    operation.add("> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/" + AgentKeys.AGENT_OUT_FILE + " 2>&1");
+    operation.add("> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/"
+        + AgentKeys.AGENT_OUT_FILE + " 2>&1");
 
     launcher.addCommand(operation.build());
 
+    // localize addon package
+    String addonAppDefString = instanceDefinition.getAppConfOperations()
+        .getGlobalOptions().getOption(AgentKeys.ADDONS, null);
+    log.debug("All addon appdefs: {}", addonAppDefString);
+    if (addonAppDefString != null) {
+      Scanner scanner = new Scanner(addonAppDefString).useDelimiter(",");
+      while (scanner.hasNext()) {
+        String addonAppDef = scanner.next();
+        String addonAppDefPath = instanceDefinition
+            .getAppConfOperations().getGlobalOptions().get(addonAppDef);
+        log.debug("Addon package {} is stored at: {}", addonAppDef, addonAppDefPath);
+        LocalResource addonPkgRes = fileSystem.createAmResource(
+            fileSystem.getFileSystem().resolvePath(new Path(addonAppDefPath)),
+            LocalResourceType.ARCHIVE);
+        launcher.addLocalResource(AgentKeys.ADDON_DEFINITION_DIR + "/" + addonAppDef, addonPkgRes);
+      }
+      log.debug("Metainfo map for master and addon: {}",
+          packageMetainfo.toString());
+    }    
+
+    // initialize addon pkg states for all componentInstanceStatus
+    Map<String, State> pkgStatuses = new TreeMap<>();
+    for (Metainfo appPkg : packageMetainfo.values()) {
+      // check each component of that addon to see if they apply to this
+      // component 'role'
+      for (ComponentsInAddonPackage comp : appPkg.getApplicationPackage()
+          .getComponents()) {
+        log.debug("Current component: {} component in metainfo: {}", role,
+            comp.getName());
+        if (comp.getName().equals(role)
+            || comp.getName().equals(AgentKeys.ADDON_FOR_ALL_COMPONENTS)) {
+          pkgStatuses.put(appPkg.getApplicationPackage().getName(), State.INIT);
+        }
+      }
+    }
+    log.debug("For component: {} pkg status map: {}", role,
+        pkgStatuses.toString());
+    
     // initialize the component instance state
     getComponentStatuses().put(label,
                                new ComponentInstanceState(
                                    role,
                                    container.getId(),
-                                   getClusterInfoPropertyValue(OptionKeys.APPLICATION_NAME)));
+                                   getClusterInfoPropertyValue(OptionKeys.APPLICATION_NAME),
+                                   pkgStatuses));
+  }
+
+  private void localizeContainerSecurityStores(ContainerLauncher launcher,
+                                               Container container,
+                                               String role,
+                                               SliderFileSystem fileSystem,
+                                               AggregateConf instanceDefinition)
+      throws SliderException, IOException {
+    MapOperations compOps = instanceDefinition.getAppConfOperations()
+        .getComponent(role);
+    // generate and localize security stores
+    SecurityStore[] stores = generateSecurityStores(container, role,
+                                                    instanceDefinition, compOps);
+    for (SecurityStore store : stores) {
+      LocalResource keystoreResource = fileSystem.createAmResource(
+          uploadSecurityResource(store.getFile(), fileSystem), LocalResourceType.FILE);
+      launcher.addLocalResource(String.format("secstores/%s-%s.p12",
+                                              store.getType(), role),
+                                keystoreResource);
+    }
+  }
+
+  private SecurityStore[] generateSecurityStores(Container container,
+                                                 String role,
+                                                 AggregateConf instanceDefinition,
+                                                 MapOperations compOps)
+      throws SliderException, IOException {
+    return StoresGenerator.generateSecurityStores(container.getNodeId().getHost(),
+                                           container.getId().toString(), role,
+                                           instanceDefinition, compOps);
+  }
+
+  private boolean areStoresRequested(MapOperations compOps) {
+    return compOps != null ? compOps.
+        getOptionBool(SliderKeys.COMP_STORES_REQUIRED_KEY, false) : false;
   }
 
   private void localizeContainerSSLResources(ContainerLauncher launcher,
@@ -439,8 +575,7 @@ public class AgentProviderService extends AbstractProviderService implements
       throws SliderException {
     try {
       // localize server cert
-      Path certsDir = new Path(fileSystem.buildClusterDirPath(
-          getClusterName()), "certs");
+      Path certsDir = fileSystem.buildClusterSecurityDirPath(getClusterName());
       LocalResource certResource = fileSystem.createAmResource(
           new Path(certsDir, SliderKeys.CRT_FILE_NAME),
             LocalResourceType.FILE);
@@ -451,21 +586,21 @@ public class AgentProviderService extends AbstractProviderService implements
       CertificateManager certMgr = new CertificateManager();
       String hostname = container.getNodeId().getHost();
       String containerId = container.getId().toString();
-      certMgr.generateAgentCertificate(hostname, containerId);
+      certMgr.generateContainerCertificate(hostname, containerId);
       LocalResource agentCertResource = fileSystem.createAmResource(
           uploadSecurityResource(
             CertificateManager.getAgentCertficateFilePath(containerId),
             fileSystem), LocalResourceType.FILE);
       // still using hostname as file name on the agent side, but the files
       // do end up under the specific container's file space
-      launcher.addLocalResource("certs/" + hostname + ".crt",
-                                agentCertResource);
+      launcher.addLocalResource(AgentKeys.INFRA_RUN_SECURITY_DIR + hostname +
+                                ".crt", agentCertResource);
       LocalResource agentKeyResource = fileSystem.createAmResource(
           uploadSecurityResource(
               CertificateManager.getAgentKeyFilePath(containerId), fileSystem),
             LocalResourceType.FILE);
-      launcher.addLocalResource("certs/" + hostname + ".key",
-                                agentKeyResource);
+      launcher.addLocalResource(AgentKeys.INFRA_RUN_SECURITY_DIR + hostname +
+                                ".key", agentKeyResource);
 
     } catch (Exception e) {
       throw new SliderException(SliderExitCodes.EXIT_DEPLOYMENT_FAILED, e,
@@ -475,8 +610,7 @@ public class AgentProviderService extends AbstractProviderService implements
 
   private Path uploadSecurityResource(File resource, SliderFileSystem fileSystem)
       throws IOException {
-    Path certsDir = new Path(fileSystem.buildClusterDirPath(getClusterName()),
-                             "certs");
+    Path certsDir = fileSystem.buildClusterSecurityDirPath(getClusterName());
     if (!fileSystem.getFileSystem().exists(certsDir)) {
       fileSystem.getFileSystem().mkdirs(certsDir,
         new FsPermission(FsAction.ALL, FsAction.NONE, FsAction.NONE));
@@ -523,27 +657,28 @@ public class AgentProviderService extends AbstractProviderService implements
       // we need to localize the keytab files in the directory
       Path keytabDirPath = fileSystem.buildKeytabPath(keytabDir, null,
                                                       getClusterName());
-      FileStatus[] keytabs = fileSystem.getFileSystem().listStatus(keytabDirPath);
-      LocalResource keytabRes;
       boolean serviceKeytabsDeployed = false;
-      for (FileStatus keytab : keytabs) {
-        if (!amKeytabName.equals(keytab.getPath().getName())
-            && keytab.getPath().getName().endsWith(".keytab")) {
-          serviceKeytabsDeployed = true;
-          log.info("Localizing keytab {}", keytab.getPath().getName());
-          keytabRes = fileSystem.createAmResource(keytab.getPath(),
-            LocalResourceType.FILE);
-          launcher.addLocalResource(SliderKeys.KEYTAB_DIR + "/" +
-                                  keytab.getPath().getName(),
-                                  keytabRes);
+      if (fileSystem.getFileSystem().exists(keytabDirPath)) {
+        FileStatus[] keytabs = fileSystem.getFileSystem().listStatus(keytabDirPath);
+        LocalResource keytabRes;
+        for (FileStatus keytab : keytabs) {
+          if (!amKeytabName.equals(keytab.getPath().getName())
+              && keytab.getPath().getName().endsWith(".keytab")) {
+            serviceKeytabsDeployed = true;
+            log.info("Localizing keytab {}", keytab.getPath().getName());
+            keytabRes = fileSystem.createAmResource(keytab.getPath(),
+              LocalResourceType.FILE);
+            launcher.addLocalResource(SliderKeys.KEYTAB_DIR + "/" +
+                                    keytab.getPath().getName(),
+                                    keytabRes);
+          }
         }
       }
       if (!serviceKeytabsDeployed) {
         log.warn("No service keytabs for the application have been localized.  "
                  + "If the application requires keytabs for secure operation, "
                  + "please ensure that the required keytabs have been uploaded "
-                 + "to the folder designated by the property {}: {}",
-                 SliderXmlConfKeys.KEY_HDFS_KEYTAB_DIR, keytabDirPath);
+                 + "to the folder {}", keytabDirPath);
       }
     }
   }
@@ -573,8 +708,7 @@ public class AgentProviderService extends AbstractProviderService implements
         String label = getContainerLabel(container, roleName);
         log.info("Rebuilding in-memory: container {} in role {} in cluster {}",
                  container.getId(), roleName, applicationId);
-        getComponentStatuses().put(
-            label,
+        getComponentStatuses().put(label,
             new ComponentInstanceState(roleName, container.getId(),
                                        applicationId));
       } else {
@@ -592,16 +726,21 @@ public class AgentProviderService extends AbstractProviderService implements
   /**
    * Handle registration calls from the agents
    *
-   * @param registration
+   * @param registration registration entry
    *
-   * @return
+   * @return response
    */
   @Override
   public RegistrationResponse handleRegistration(Register registration) {
-    log.info("Handling registration: " + registration);
+    log.info("Handling registration: {}", registration);
     RegistrationResponse response = new RegistrationResponse();
     String label = registration.getLabel();
+    String pkg = registration.getPkg();
     State agentState = registration.getActualState();
+    String appVersion = registration.getAppVersion();
+
+    log.info("label: {} pkg: {}", label, pkg);
+
     if (getComponentStatuses().containsKey(label)) {
       response.setResponseStatus(RegistrationStatus.OK);
       ComponentInstanceState componentStatus = getComponentStatuses().get(label);
@@ -627,13 +766,38 @@ public class AgentProviderService extends AbstractProviderService implements
       if (folders != null && !folders.isEmpty()) {
         publishFolderPaths(folders, containerId, roleName, hostFqdn);
       }
+
+      // Set app version if empty. It gets unset during upgrade - why?
+      checkAndSetContainerAppVersion(containerId, appVersion);
     } else {
       response.setResponseStatus(RegistrationStatus.FAILED);
       response.setLog("Label not recognized.");
       log.warn("Received registration request from unknown label {}", label);
     }
-    log.info("Registration response: " + response);
+    log.info("Registration response: {}", response);
     return response;
+  }
+
+  // Checks if app version is empty. Sets it to the version as reported by the
+  // container during registration phase.
+  private void checkAndSetContainerAppVersion(String containerId,
+      String appVersion) {
+    StateAccessForProviders amState = getAmState();
+    try {
+      RoleInstance role = amState.getOwnedContainer(containerId);
+      if (role != null) {
+        String currentAppVersion = role.appVersion;
+        log.debug("Container = {}, app version current = {} new = {}",
+            containerId, currentAppVersion, appVersion);
+        if (currentAppVersion == null
+            || currentAppVersion.equals(APP_VERSION_UNKNOWN)) {
+          amState.getOwnedContainer(containerId).appVersion = appVersion;
+        }
+      }
+    } catch (NoSuchNodeException e) {
+      // ignore - there is nothing to do if we don't find a container
+      log.warn("Owned container {} not found - {}", containerId, e);
+    }
   }
 
   /**
@@ -645,25 +809,42 @@ public class AgentProviderService extends AbstractProviderService implements
    */
   @Override
   public HeartBeatResponse handleHeartBeat(HeartBeat heartBeat) {
-    log.debug("Handling heartbeat: " + heartBeat);
+    log.debug("Handling heartbeat: {}", heartBeat);
     HeartBeatResponse response = new HeartBeatResponse();
     long id = heartBeat.getResponseId();
     response.setResponseId(id + 1L);
 
     String label = heartBeat.getHostname();
+    String pkg = heartBeat.getPkg();
+
+    log.debug("package received: " + pkg);
+    
     String roleName = getRoleName(label);
     String containerId = getContainerId(label);
+    boolean doUpgrade = false;
+    if (isInUpgradeMode && upgradeContainers.contains(containerId)) {
+      doUpgrade = true;
+    }
 
     StateAccessForProviders accessor = getAmState();
-    CommandScript cmdScript = getScriptPathFromMetainfo(roleName);
+    CommandScript cmdScript = getScriptPathForMasterPackage(roleName);
+    List<ComponentCommand> commands = getMetaInfo().getApplicationComponent(roleName).getCommands();
 
-    if (cmdScript == null || cmdScript.getScript() == null) {
-      log.error("role.script is unavailable for " + roleName + ". Commands will not be sent.");
+    if (!isDockerContainer(roleName)
+        && (cmdScript == null || cmdScript.getScript() == null)
+        && commands.size() == 0) {
+      log.error(
+          "role.script is unavailable for {}. Commands will not be sent.",
+          roleName);
       return response;
     }
 
-    String scriptPath = cmdScript.getScript();
-    long timeout = cmdScript.getTimeout();
+    String scriptPath = null;
+    long timeout = 600L;
+    if (cmdScript != null) {
+      scriptPath = cmdScript.getScript();
+      timeout = cmdScript.getTimeout();
+    }
 
     if (timeout == 0L) {
       timeout = 600L;
@@ -681,22 +862,47 @@ public class AgentProviderService extends AbstractProviderService implements
     Boolean isMaster = isMaster(roleName);
     ComponentInstanceState componentStatus = getComponentStatuses().get(label);
     componentStatus.heartbeat(System.currentTimeMillis());
+    if (doUpgrade) {
+      switch (componentStatus.getState()) {
+      case STARTED:
+        componentStatus.setTargetState(State.UPGRADED);
+        break;
+      case UPGRADED:
+        componentStatus.setTargetState(State.STOPPED);
+        break;
+      case STOPPED:
+        componentStatus.setTargetState(State.TERMINATING);
+        break;
+      default:
+        break;
+      }
+      log.info("Current state = {} target state {}",
+          componentStatus.getState(), componentStatus.getTargetState());
+    }
+
+    if (appStopInitiated && !componentStatus.isStopInitiated()) {
+      log.info("Stop initiated for label {}", label);
+      componentStatus.setTargetState(State.STOPPED);
+      componentStatus.setStopInitiated(true);
+    }
 
     publishConfigAndExportGroups(heartBeat, componentStatus, roleName);
-
+    CommandResult result = null;
     List<CommandReport> reports = heartBeat.getReports();
-    if (reports != null && !reports.isEmpty()) {
+    if (SliderUtils.isNotEmpty(reports)) {
       CommandReport report = reports.get(0);
       Map<String, String> ports = report.getAllocatedPorts();
-      if (ports != null && !ports.isEmpty()) {
+      if (SliderUtils.isNotEmpty(ports)) {
         processAllocatedPorts(heartBeat.getFqdn(), roleName, containerId, ports);
       }
-      CommandResult result = CommandResult.getCommandResult(report.getStatus());
+      result = CommandResult.getCommandResult(report.getStatus());
       Command command = Command.getCommand(report.getRoleCommand());
-      componentStatus.applyCommandResult(result, command);
-      log.info("Component operation. Status: {}", result);
+      componentStatus.applyCommandResult(result, command, pkg);
+      log.info("Component operation. Status: {}; new container state: {};"
+          + " new component state: {}", result,
+          componentStatus.getContainerState(), componentStatus.getState());
 
-      if (command == Command.INSTALL && report.getFolders() != null && report.getFolders().size() > 0) {
+      if (command == Command.INSTALL && SliderUtils.isNotEmpty(report.getFolders())) {
         publishFolderPaths(report.getFolders(), containerId, roleName, heartBeat.getFqdn());
       }
     }
@@ -706,27 +912,111 @@ public class AgentProviderService extends AbstractProviderService implements
 
     if (id < waitForCount) {
       log.info("Waiting until heartbeat count {}. Current val: {}", waitForCount, id);
-      getComponentStatuses().put(roleName, componentStatus);
+      getComponentStatuses().put(label, componentStatus);
       return response;
     }
 
-    Command command = componentStatus.getNextCommand();
+    Command command = componentStatus.getNextCommand(doUpgrade);
     try {
       if (Command.NOP != command) {
+        log.debug("For comp {} pkg {} issuing {}", roleName,
+            componentStatus.getNextPkgToInstall(), command.toString());
         if (command == Command.INSTALL) {
           log.info("Installing {} on {}.", roleName, containerId);
-          addInstallCommand(roleName, containerId, response, scriptPath, timeout);
+          if (isDockerContainer(roleName)){
+            addInstallDockerCommand(roleName, containerId, response, null, timeout);
+          } else if (scriptPath != null) {
+            addInstallCommand(roleName, containerId, response, scriptPath,
+                null, timeout, null);
+          } else {
+            // commands
+            ComponentCommand installCmd = null;
+            for (ComponentCommand compCmd : commands) {
+              if (compCmd.getName().equals("INSTALL")) {
+                installCmd = compCmd;
+              }
+            }
+            addInstallCommand(roleName, containerId, response, null,
+                installCmd, timeout, null);
+          }
+          componentStatus.commandIssued(command);
+        } else if (command == Command.INSTALL_ADDON) {
+          String nextPkgToInstall = componentStatus.getNextPkgToInstall();
+          // retrieve scriptPath or command of that package for the component
+          for (ComponentsInAddonPackage comp : packageMetainfo
+              .get(nextPkgToInstall).getApplicationPackage().getComponents()) {
+            // given nextPkgToInstall and roleName is determined, the if below
+            // should only execute once per heartbeat
+            log.debug("Addon component: {} pkg: {} script: {}", comp.getName(),
+                nextPkgToInstall, comp.getCommandScript().getScript());
+            if (comp.getName().equals(roleName)
+                || comp.getName().equals(AgentKeys.ADDON_FOR_ALL_COMPONENTS)) {
+              scriptPath = comp.getCommandScript().getScript();
+              if (scriptPath != null) {
+                addInstallCommand(roleName, containerId, response, scriptPath,
+                    null, timeout, nextPkgToInstall);
+              } else {
+                ComponentCommand installCmd = null;
+                for (ComponentCommand compCmd : comp.getCommands()) {
+                  if (compCmd.getName().equals("INSTALL")) {
+                    installCmd = compCmd;
+                  }
+                }
+                addInstallCommand(roleName, containerId, response, null,
+                    installCmd, timeout, nextPkgToInstall);
+              }
+            }
+          }
           componentStatus.commandIssued(command);
         } else if (command == Command.START) {
           // check against dependencies
           boolean canExecute = commandOrder.canExecute(roleName, command, getComponentStatuses().values());
           if (canExecute) {
             log.info("Starting {} on {}.", roleName, containerId);
-            addStartCommand(roleName, containerId, response, scriptPath, timeout, isMarkedAutoRestart(roleName));
+            if (isDockerContainer(roleName)){
+              addStartDockerCommand(roleName, containerId, response, null, timeout, false);
+            } else if (scriptPath != null) {
+              addStartCommand(roleName,
+                              containerId,
+                              response,
+                              scriptPath,
+                              null,
+                              null,
+                              timeout,
+                              isMarkedAutoRestart(roleName));
+            } else {
+              ComponentCommand startCmd = null;
+              for (ComponentCommand compCmd : commands) {
+                if (compCmd.getName().equals("START")) {
+                  startCmd = compCmd;
+                }
+              }
+              ComponentCommand stopCmd = null;
+              for (ComponentCommand compCmd : commands) {
+                if (compCmd.getName().equals("STOP")) {
+                  stopCmd = compCmd;
+                }
+              }
+              addStartCommand(roleName, containerId, response, null, startCmd, stopCmd, timeout, false);
+            }
             componentStatus.commandIssued(command);
           } else {
             log.info("Start of {} on {} delayed as dependencies have not started.", roleName, containerId);
           }
+        } else if (command == Command.UPGRADE) {
+          addUpgradeCommand(roleName, containerId, response, scriptPath,
+              timeout);
+          componentStatus.commandIssued(command, true);
+        } else if (command == Command.STOP) {
+          log.info("Stop command being sent to container with id {}",
+              containerId);
+          addStopCommand(roleName, containerId, response, scriptPath, timeout,
+              doUpgrade);
+          componentStatus.commandIssued(command);
+        } else if (command == Command.TERMINATE) {
+          log.info("A formal terminate command is being sent to container {}"
+              + " in state {}", label, componentStatus.getState());
+          response.setTerminateAgent(true);
         }
       }
 
@@ -735,23 +1025,43 @@ public class AgentProviderService extends AbstractProviderService implements
           && command == Command.NOP) {
         if (!componentStatus.getConfigReported()) {
           log.info("Requesting applied config for {} on {}.", roleName, containerId);
-          addGetConfigCommand(roleName, containerId, response);
+          if (isDockerContainer(roleName)){
+            addGetConfigDockerCommand(roleName, containerId, response);
+          } else {
+            addGetConfigCommand(roleName, containerId, response);
+          }
         }
       }
-
+      
       // if restart is required then signal
       response.setRestartEnabled(false);
       if (componentStatus.getState() == State.STARTED
           && command == Command.NOP && isMarkedAutoRestart(roleName)) {
         response.setRestartEnabled(true);
       }
+
+      //If INSTALL_FAILED and no INSTALL is scheduled let the agent fail
+      if (componentStatus.getState() == State.INSTALL_FAILED
+         && command == Command.NOP) {
+        log.warn("Sending terminate signal to container that failed installation: {}", label);
+        response.setTerminateAgent(true);
+      }
+
     } catch (SliderException e) {
       log.warn("Component instance failed operation.", e);
-      componentStatus.applyCommandResult(CommandResult.FAILED, command);
+      componentStatus.applyCommandResult(CommandResult.FAILED, command, null);
     }
 
     log.debug("Heartbeat response: " + response);
     return response;
+  }
+
+  private boolean isDockerContainer(String roleName) {
+    String type = getMetaInfo().getApplicationComponent(roleName).getType();
+    if (SliderUtils.isSet(type)) {
+      return type.toLowerCase().equals(SliderUtils.DOCKER);
+    }
+    return false;
   }
 
   protected void processAllocatedPorts(String fqdn,
@@ -762,7 +1072,7 @@ public class AgentProviderService extends AbstractProviderService implements
     try {
       instance = getAmState().getOwnedContainer(containerId);
     } catch (NoSuchNodeException e) {
-      log.warn("Failed to locate instance of container {}: {}", containerId, e);
+      log.warn("Failed to locate instance of container {}", containerId, e);
       instance = null;
     }
     for (Map.Entry<String, String> port : ports.entrySet()) {
@@ -782,12 +1092,11 @@ public class AgentProviderService extends AbstractProviderService implements
           // to allocate port or the component may need an array of ports
           instance.registerPortEndpoint(Integer.valueOf(portNo), portname);
         } catch (NumberFormatException e) {
-          log.warn("Failed to parse {}: {}", portNo, e);
+          log.warn("Failed to parse {}", portNo, e);
         }
       }
     }
 
-    // component specific publishes
     processAndPublishComponentSpecificData(ports, containerId, fqdn, roleName);
     processAndPublishComponentSpecificExports(ports, containerId, fqdn, roleName);
 
@@ -941,8 +1250,8 @@ public class AgentProviderService extends AbstractProviderService implements
   }
 
   @VisibleForTesting
-  protected Metainfo getMetainfo() {
-    return this.metainfo;
+  protected Metainfo getMetaInfo() {
+    return this.metaInfo;
   }
 
   @VisibleForTesting
@@ -952,8 +1261,15 @@ public class AgentProviderService extends AbstractProviderService implements
 
   @VisibleForTesting
   protected Metainfo getApplicationMetainfo(SliderFileSystem fileSystem,
-                                            String appDef) throws IOException {
-    return AgentUtils.getApplicationMetainfo(fileSystem, appDef);
+      String appDef, boolean addonPackage) throws IOException,
+      BadConfigException {
+    return AgentUtils.getApplicationMetainfo(fileSystem, appDef, addonPackage);
+  }
+
+  @VisibleForTesting
+  protected Metainfo getApplicationMetainfo(SliderFileSystem fileSystem,
+      String appDef) throws IOException, BadConfigException {
+    return getApplicationMetainfo(fileSystem, appDef, false);
   }
 
   @VisibleForTesting
@@ -961,22 +1277,33 @@ public class AgentProviderService extends AbstractProviderService implements
     this.heartbeatMonitorInterval = heartbeatMonitorInterval;
   }
 
+  public void setInUpgradeMode(boolean inUpgradeMode) {
+    this.isInUpgradeMode = inUpgradeMode;
+  }
+
+  public void addUpgradeContainers(Set<String> upgradeContainers) {
+    this.upgradeContainers.addAll(upgradeContainers);
+  }
+
+  public void setAppStopInitiated(boolean appStopInitiated) {
+    this.appStopInitiated = appStopInitiated;
+  }
+
   /**
    * Read all default configs
    *
-   * @param fileSystem
-   * @param appDef
-   * @param metainfo
+   * @param fileSystem fs
+   * @param appDef app default path
+   * @param metainfo metadata
    *
-   * @return
-   *
+   * @return configuration maps
+   * 
    * @throws IOException
    */
   protected Map<String, DefaultConfig> initializeDefaultConfigs(SliderFileSystem fileSystem,
                                                                 String appDef, Metainfo metainfo) throws IOException {
-    Map<String, DefaultConfig> defaultConfigMap = new HashMap<String, DefaultConfig>();
-    if (metainfo.getApplication().getConfigFiles() != null &&
-        metainfo.getApplication().getConfigFiles().size() > 0) {
+    Map<String, DefaultConfig> defaultConfigMap = new HashMap<>();
+    if (SliderUtils.isNotEmpty(metainfo.getApplication().getConfigFiles())) {
       for (ConfigFile configFile : metainfo.getApplication().getConfigFiles()) {
         DefaultConfig config = null;
         try {
@@ -1003,7 +1330,7 @@ public class AgentProviderService extends AbstractProviderService implements
   }
 
   private String getClusterName() {
-    if (clusterName == null || clusterName.length() == 0) {
+    if (SliderUtils.isUnset(clusterName)) {
       clusterName = getAmState().getInternalsSnapshot().get(OptionKeys.APPLICATION_NAME);
     }
     return clusterName;
@@ -1028,13 +1355,10 @@ public class AgentProviderService extends AbstractProviderService implements
   /**
    * Get a list of all hosts for all role/container per role
    *
-   * @return
+   * @return the map of role->node
    */
   protected Map<String, Map<String, ClusterNode>> getRoleClusterNodeMapping() {
-    amState.refreshClusterStatus();
-    return (Map<String, Map<String, ClusterNode>>)
-        amState.getClusterStatus().status.get(
-            ClusterDescriptionKeys.KEY_CLUSTER_LIVE);
+    return amState.getRoleClusterNodeMapping();
   }
 
   private String getContainerLabel(Container container, String role) {
@@ -1135,7 +1459,7 @@ public class AgentProviderService extends AbstractProviderService implements
     for(Map.Entry<String, ExportEntry> logEntry : folderExports.entrySet())
     {
       String componentName = logEntry.getValue().getTag();
-      if(!perComponentList.containsKey(componentName)) {
+      if (!perComponentList.containsKey(componentName)) {
         perComponentList.put(componentName, new ArrayList<ExportEntry>());
       }
       perComponentList.get(componentName).add(logEntry.getValue());
@@ -1156,10 +1480,10 @@ public class AgentProviderService extends AbstractProviderService implements
     if (statuses != null && !statuses.isEmpty()) {
       log.info("Processing {} status reports.", statuses.size());
       for (ComponentStatus status : statuses) {
-        log.info("Status report: " + status.toString());
+        log.info("Status report: {}", status.toString());
 
         if (status.getConfigs() != null) {
-          Application application = getMetainfo().getApplication();
+          Application application = getMetaInfo().getApplication();
 
           if (canAnyMasterPublishConfig() == false || canPublishConfig(componentName)) {
             // If no Master can explicitly publish then publish if its a master
@@ -1186,19 +1510,19 @@ public class AgentProviderService extends AbstractProviderService implements
           }
 
           List<ExportGroup> appExportGroups = application.getExportGroups();
-          boolean hasExportGroups = appExportGroups != null && !appExportGroups.isEmpty();
+          boolean hasExportGroups = SliderUtils.isNotEmpty(appExportGroups);
 
           Set<String> appExports = new HashSet();
           String appExportsStr = getApplicationComponent(componentName).getAppExports();
           if (SliderUtils.isSet(appExportsStr)) {
             for (String appExport : appExportsStr.split(",")) {
-              if (appExport.trim().length() > 0) {
+              if (!appExport.trim().isEmpty()) {
                 appExports.add(appExport.trim());
               }
             }
           }
 
-          if (hasExportGroups && appExports.size() > 0) {
+          if (hasExportGroups && !appExports.isEmpty()) {
             String configKeyFormat = "${site.%s.%s}";
             String hostKeyFormat = "${%s_HOST}";
 
@@ -1220,7 +1544,7 @@ public class AgentProviderService extends AbstractProviderService implements
             Set<String> modifiedGroups = new HashSet<String>();
             for (ExportGroup exportGroup : appExportGroups) {
               List<Export> exports = exportGroup.getExports();
-              if (exports != null && !exports.isEmpty()) {
+              if (SliderUtils.isNotEmpty(exports)) {
                 String exportGroupName = exportGroup.getName();
                 ConcurrentHashMap<String, List<ExportEntry>> map =
                     (ConcurrentHashMap<String, List<ExportEntry>>)getCurrentExports(exportGroupName);
@@ -1280,7 +1604,7 @@ public class AgentProviderService extends AbstractProviderService implements
       Map<String, String> simpleEntries = new HashMap<String, String>();
       for (Map.Entry<String, List<ExportEntry>> entry : entries.entrySet()) {
         List<ExportEntry> exports = entry.getValue();
-        if(exports != null && exports.size() > 0) {
+        if (SliderUtils.isNotEmpty(exports)) {
           // there is no support for multiple exports per name - so extract only the first one
           simpleEntries.put(entry.getKey(), entry.getValue().get(0).getValue());
         }
@@ -1303,7 +1627,7 @@ public class AgentProviderService extends AbstractProviderService implements
     String hostNamePattern = "${THIS_HOST}";
     Map<String, String> toPublish = new HashMap<String, String>();
 
-    Application application = getMetainfo().getApplication();
+    Application application = getMetaInfo().getApplication();
     for (Component component : application.getComponents()) {
       if (component.getName().equals(componentName)) {
         if (component.getComponentExports().size() > 0) {
@@ -1353,15 +1677,15 @@ public class AgentProviderService extends AbstractProviderService implements
     String portVarFormat = "${site.%s}";
     String hostNamePattern = "${" + compName + "_HOST}";
 
-    List<ExportGroup> appExportGroups = getMetainfo().getApplication().getExportGroups();
-    Component component = getMetainfo().getApplicationComponent(compName);
+    List<ExportGroup> appExportGroups = getMetaInfo().getApplication().getExportGroups();
+    Component component = getMetaInfo().getApplicationComponent(compName);
     if (component != null && SliderUtils.isSet(component.getCompExports())
-        && appExportGroups != null && appExportGroups.size() > 0) {
+        && SliderUtils.isNotEmpty(appExportGroups)) {
 
       Set<String> compExports = new HashSet();
       String compExportsStr = component.getCompExports();
       for (String compExport : compExportsStr.split(",")) {
-        if (compExport.trim().length() > 0) {
+        if (!compExport.trim().isEmpty()) {
           compExports.add(compExport.trim());
         }
       }
@@ -1370,7 +1694,7 @@ public class AgentProviderService extends AbstractProviderService implements
       Set<String> modifiedGroups = new HashSet<String>();
       for (ExportGroup exportGroup : appExportGroups) {
         List<Export> exports = exportGroup.getExports();
-        if (exports != null && !exports.isEmpty()) {
+        if (SliderUtils.isNotEmpty(exports)) {
           String exportGroupName = exportGroup.getName();
           ConcurrentHashMap<String, List<ExportEntry>> map =
               (ConcurrentHashMap<String, List<ExportEntry>>) getCurrentExports(exportGroupName);
@@ -1405,7 +1729,8 @@ public class AgentProviderService extends AbstractProviderService implements
                   if (existingList != null) {
                     boolean updatedInPlace = false;
                     for (ExportEntry entry : existingList) {
-                      if (containerId.equalsIgnoreCase(entry.getContainerId())) {
+                      if (containerId.toLowerCase(Locale.ENGLISH)
+                                     .equals(entry.getContainerId())) {
                         entryToAdd.setValue(templateToExport);
                         entryToAdd.setUpdatedTime(now.toString());
                         updatedInPlace = true;
@@ -1450,22 +1775,21 @@ public class AgentProviderService extends AbstractProviderService implements
   /**
    * Return Component based on name
    *
-   * @param roleName
+   * @param roleName component name
    *
-   * @return
+   * @return the component entry or null for no match
    */
   protected Component getApplicationComponent(String roleName) {
-    return getMetainfo().getApplicationComponent(roleName);
+    return getMetaInfo().getApplicationComponent(roleName);
   }
 
   /**
    * Extract script path from the application metainfo
    *
-   * @param roleName
-   *
-   * @return
+   * @param roleName  component name
+   * @return the script path or null for no match
    */
-  protected CommandScript getScriptPathFromMetainfo(String roleName) {
+  protected CommandScript getScriptPathForMasterPackage(String roleName) {
     Component component = getApplicationComponent(roleName);
     if (component != null) {
       return component.getCommandScript();
@@ -1476,9 +1800,9 @@ public class AgentProviderService extends AbstractProviderService implements
   /**
    * Is the role of type MASTER
    *
-   * @param roleName
+   * @param roleName  component name
    *
-   * @return
+   * @return true if the role category is MASTER
    */
   protected boolean isMaster(String roleName) {
     Component component = getApplicationComponent(roleName);
@@ -1493,9 +1817,9 @@ public class AgentProviderService extends AbstractProviderService implements
   /**
    * Can the role publish configuration
    *
-   * @param roleName
+   * @param roleName  component name
    *
-   * @return
+   * @return true if it can be pubished
    */
   protected boolean canPublishConfig(String roleName) {
     Component component = getApplicationComponent(roleName);
@@ -1508,14 +1832,14 @@ public class AgentProviderService extends AbstractProviderService implements
   /**
    * Checks if the role is marked auto-restart
    *
-   * @param roleName
+   * @param roleName  component name
    *
-   * @return
+   * @return true if it is auto-restart
    */
   protected boolean isMarkedAutoRestart(String roleName) {
     Component component = getApplicationComponent(roleName);
     if (component != null) {
-      return component.getRequiresAutoRestart();
+      return component.getAutoStartOnFailureBoolean();
     }
     return false;
   }
@@ -1523,11 +1847,11 @@ public class AgentProviderService extends AbstractProviderService implements
   /**
    * Can any master publish config explicitly, if not a random master is used
    *
-   * @return
+   * @return true if the condition holds
    */
   protected boolean canAnyMasterPublishConfig() {
     if (canAnyMasterPublish == null) {
-      Application application = getMetainfo().getApplication();
+      Application application = getMetaInfo().getApplication();
       if (application == null) {
         log.error("Malformed app definition: Expect application as root element in the metainfo.xml");
       } else {
@@ -1561,7 +1885,10 @@ public class AgentProviderService extends AbstractProviderService implements
    * @param containerId
    * @param response
    * @param scriptPath
-   *
+   * @param pkg
+   *          when this field is null, it indicates the command is for the
+   *          master package; while not null, for the package named by this
+   *          field
    * @throws SliderException
    */
   @VisibleForTesting
@@ -1569,6 +1896,57 @@ public class AgentProviderService extends AbstractProviderService implements
                                    String containerId,
                                    HeartBeatResponse response,
                                    String scriptPath,
+                                   ComponentCommand compCmd,
+                                   long timeout,
+                                   String pkg)
+      throws SliderException {
+    assert getAmState().isApplicationLive();
+    ConfTreeOperations appConf = getAmState().getAppConfSnapshot();
+
+    ExecutionCommand cmd = new ExecutionCommand(AgentCommandType.EXECUTION_COMMAND);
+    prepareExecutionCommand(cmd);
+    String clusterName = getClusterName();
+    cmd.setClusterName(clusterName);
+    cmd.setRoleCommand(Command.INSTALL.toString());
+    cmd.setServiceName(clusterName);
+    cmd.setComponentName(componentName);
+    cmd.setRole(componentName);
+    cmd.setPkg(pkg);
+    Map<String, String> hostLevelParams = new TreeMap<String, String>();
+    hostLevelParams.put(JAVA_HOME, appConf.getGlobalOptions().getOption(JAVA_HOME, getJDKDir()));
+    hostLevelParams.put(PACKAGE_LIST, getPackageList());
+    hostLevelParams.put(CONTAINER_ID, containerId);
+    cmd.setHostLevelParams(hostLevelParams);
+
+    Map<String, Map<String, String>> configurations = buildCommandConfigurations(appConf, containerId, componentName);
+    cmd.setConfigurations(configurations);
+    Map<String, Map<String, String>> componentConfigurations = buildComponentConfigurations(appConf);
+    cmd.setComponentConfigurations(componentConfigurations);
+    
+    if (SliderUtils.isSet(scriptPath)) {
+      cmd.setCommandParams(commandParametersSet(scriptPath, timeout, false));
+    } else {
+      // assume it to be default shell command
+      ComponentCommand effectiveCommand = compCmd;
+      if (effectiveCommand == null) {
+        effectiveCommand = ComponentCommand.getDefaultComponentCommand("INSTALL");
+      }
+      cmd.setCommandParams(commandParametersSet(effectiveCommand, timeout, false));
+      configurations.get("global").put("exec_cmd", effectiveCommand.getExec());
+    }
+
+    cmd.setHostname(getClusterInfoPropertyValue(StatusKeys.INFO_AM_HOSTNAME));
+
+    response.addExecutionCommand(cmd);
+
+    log.debug("command looks like: {} ",  cmd);
+  }
+
+  @VisibleForTesting
+  protected void addInstallDockerCommand(String componentName,
+                                   String containerId,
+                                   HeartBeatResponse response,
+                                   ComponentCommand compCmd,
                                    long timeout)
       throws SliderException {
     assert getAmState().isApplicationLive();
@@ -1583,43 +1961,106 @@ public class AgentProviderService extends AbstractProviderService implements
     cmd.setComponentName(componentName);
     cmd.setRole(componentName);
     Map<String, String> hostLevelParams = new TreeMap<String, String>();
-    hostLevelParams.put(JAVA_HOME, appConf.getGlobalOptions().getMandatoryOption(JAVA_HOME));
     hostLevelParams.put(PACKAGE_LIST, getPackageList());
     hostLevelParams.put(CONTAINER_ID, containerId);
     cmd.setHostLevelParams(hostLevelParams);
 
-    Map<String, Map<String, String>> configurations = buildCommandConfigurations(appConf, containerId, componentName);
+    Map<String, Map<String, String>> configurations = buildCommandConfigurations(
+        appConf, containerId, componentName);
     cmd.setConfigurations(configurations);
-
-    cmd.setCommandParams(setCommandParameters(scriptPath, timeout, false));
+    Map<String, Map<String, String>> componentConfigurations = buildComponentConfigurations(appConf);
+    cmd.setComponentConfigurations(componentConfigurations);
+    
+    ComponentCommand effectiveCommand = compCmd;
+    if (compCmd == null) {
+      effectiveCommand = new ComponentCommand();
+      effectiveCommand.setName("INSTALL");
+      effectiveCommand.setExec("DEFAULT");
+    }
+    cmd.setCommandParams(setCommandParameters(effectiveCommand, timeout, false));
+    configurations.get("global").put("exec_cmd", effectiveCommand.getExec());
 
     cmd.setHostname(getClusterInfoPropertyValue(StatusKeys.INFO_AM_HOSTNAME));
+    cmd.addContainerDetails(componentName, getMetaInfo());
+
+    Map<String, String> dockerConfig = new HashMap<String, String>();
+    dockerConfig.put(
+        "docker.command_path",
+        getConfigFromMetaInfoWithAppConfigOverriding(componentName,
+            "commandPath"));
+    dockerConfig.put("docker.image_name",
+        getConfigFromMetaInfo(componentName, "image"));
+    configurations.put("docker", dockerConfig);
+
+    log.debug("Docker- command: {}", cmd.toString());
+
     response.addExecutionCommand(cmd);
   }
 
-  private String getPackageList() {
+  private Map<String, String> setCommandParameters(String scriptPath,
+      long timeout, boolean recordConfig) {
+    Map<String, String> cmdParams = new TreeMap<String, String>();
+    cmdParams.put("service_package_folder",
+        "${AGENT_WORK_ROOT}/work/app/definition/package");
+    cmdParams.put("script", scriptPath);
+    cmdParams.put("schema_version", "2.0");
+    cmdParams.put("command_timeout", Long.toString(timeout));
+    cmdParams.put("script_type", AbstractComponent.TYPE_PYTHON);
+    cmdParams.put("record_config", Boolean.toString(recordConfig));
+    return cmdParams;
+  }
+
+  private Map<String, String> setCommandParameters(ComponentCommand compCmd,
+      long timeout, boolean recordConfig) {
+    Map<String, String> cmdParams = new TreeMap<String, String>();
+    cmdParams.put("service_package_folder",
+        "${AGENT_WORK_ROOT}/work/app/definition/package");
+    cmdParams.put("command", compCmd.getExec());
+    cmdParams.put("schema_version", "2.0");
+    cmdParams.put("command_timeout", Long.toString(timeout));
+    cmdParams.put("script_type", compCmd.getType());
+    cmdParams.put("record_config", Boolean.toString(recordConfig));
+    return cmdParams;
+  }
+
+  private Map<String, Map<String, String>> buildComponentConfigurations(
+      ConfTreeOperations appConf) {
+    return appConf.getComponents();
+  }
+
+  protected static String getPackageListFromApplication(Application application) {
     String pkgFormatString = "{\"type\":\"%s\",\"name\":\"%s\"}";
     String pkgListFormatString = "[%s]";
-    List<String> packages = new ArrayList();
-    Application application = getMetainfo().getApplication();
+    List<String> packages = new ArrayList<>();
     if (application != null) {
-      List<OSSpecific> osSpecifics = application.getOSSpecifics();
-      if (osSpecifics != null && osSpecifics.size() > 0) {
-        for (OSSpecific osSpecific : osSpecifics) {
-          if (osSpecific.getOsType().equals("any")) {
-            for (OSPackage osPackage : osSpecific.getPackages()) {
-              packages.add(String.format(pkgFormatString, osPackage.getType(), osPackage.getName()));
+      if (application.getPackages().size() > 0) {
+        List<Package> appPackages = application.getPackages();
+        for (Package appPackage : appPackages) {
+          packages.add(String.format(pkgFormatString, appPackage.getType(), appPackage.getName()));
+        }
+      } else {
+        List<OSSpecific> osSpecifics = application.getOSSpecifics();
+        if (osSpecifics != null && osSpecifics.size() > 0) {
+          for (OSSpecific osSpecific : osSpecifics) {
+            if (osSpecific.getOsType().equals("any")) {
+              for (OSPackage osPackage : osSpecific.getPackages()) {
+                packages.add(String.format(pkgFormatString, osPackage.getType(), osPackage.getName()));
+              }
             }
           }
         }
       }
     }
 
-    if (packages.size() > 0) {
-      return String.format(pkgListFormatString, StringUtils.join(",", packages));
+    if (!packages.isEmpty()) {
+      return "[" + SliderUtils.join(packages, ",", false) + "]";
     } else {
       return "[]";
     }
+  }
+
+  private String getPackageList() {
+    return getPackageListFromApplication(getMetaInfo().getApplication());
   }
 
   private void prepareExecutionCommand(ExecutionCommand cmd) {
@@ -1627,8 +2068,8 @@ public class AgentProviderService extends AbstractProviderService implements
     cmd.setCommandId(cmd.getTaskId() + "-1");
   }
 
-  private Map<String, String> setCommandParameters(String scriptPath, long timeout, boolean recordConfig) {
-    Map<String, String> cmdParams = new TreeMap<String, String>();
+  private Map<String, String> commandParametersSet(String scriptPath, long timeout, boolean recordConfig) {
+    Map<String, String> cmdParams = new TreeMap<>();
     cmdParams.put("service_package_folder",
                   "${AGENT_WORK_ROOT}/work/app/definition/package");
     cmdParams.put("script", scriptPath);
@@ -1639,8 +2080,58 @@ public class AgentProviderService extends AbstractProviderService implements
     return cmdParams;
   }
 
+  private Map<String, String> commandParametersSet(ComponentCommand compCmd, long timeout, boolean recordConfig) {
+    Map<String, String> cmdParams = new TreeMap<>();
+    cmdParams.put("service_package_folder",
+                  "${AGENT_WORK_ROOT}/work/app/definition/package");
+    cmdParams.put("command", compCmd.getExec());
+    cmdParams.put("schema_version", "2.0");
+    cmdParams.put("command_timeout", Long.toString(timeout));
+    cmdParams.put("script_type", compCmd.getType());
+    cmdParams.put("record_config", Boolean.toString(recordConfig));
+    return cmdParams;
+  }
+
   @VisibleForTesting
   protected void addStatusCommand(String componentName,
+                                  String containerId,
+                                  HeartBeatResponse response,
+                                  String scriptPath,
+                                  long timeout)
+      throws SliderException {
+    assert getAmState().isApplicationLive();
+    ConfTreeOperations appConf = getAmState().getAppConfSnapshot();
+    if (isDockerContainer(componentName)) {
+      addStatusDockerCommand(componentName, containerId, response, scriptPath,
+          timeout);
+      return;
+    }
+
+    StatusCommand cmd = new StatusCommand();
+    String clusterName = getClusterName();
+
+    cmd.setCommandType(AgentCommandType.STATUS_COMMAND);
+    cmd.setComponentName(componentName);
+    cmd.setServiceName(clusterName);
+    cmd.setClusterName(clusterName);
+    cmd.setRoleCommand(StatusCommand.STATUS_COMMAND);
+
+    Map<String, String> hostLevelParams = new TreeMap<String, String>();
+    hostLevelParams.put(JAVA_HOME, appConf.getGlobalOptions().getOption(JAVA_HOME, getJDKDir()));
+    hostLevelParams.put(CONTAINER_ID, containerId);
+    cmd.setHostLevelParams(hostLevelParams);
+
+    cmd.setCommandParams(commandParametersSet(scriptPath, timeout, false));
+
+    Map<String, Map<String, String>> configurations = buildCommandConfigurations(appConf, containerId, componentName);
+
+    cmd.setConfigurations(configurations);
+
+    response.addStatusCommand(cmd);
+  }
+
+  @VisibleForTesting
+  protected void addStatusDockerCommand(String componentName,
                                   String containerId,
                                   HeartBeatResponse response,
                                   String scriptPath,
@@ -1665,11 +2156,287 @@ public class AgentProviderService extends AbstractProviderService implements
 
     cmd.setCommandParams(setCommandParameters(scriptPath, timeout, false));
 
-    Map<String, Map<String, String>> configurations = buildCommandConfigurations(appConf, containerId, componentName);
+    Map<String, Map<String, String>> configurations = buildCommandConfigurations(
+        appConf, containerId, componentName);
+    Map<String, String> dockerConfig = new HashMap<String, String>();
+    String statusCommand = getConfigFromMetaInfoWithAppConfigOverriding(componentName, "statusCommand");
+    if (statusCommand == null) {
+      statusCommand = "docker top "
+            + containerId
+            + " | grep \"\"";// default value
+    }
+    dockerConfig.put("docker.status_command",statusCommand);
+    configurations.put("docker", dockerConfig);
+    cmd.setConfigurations(configurations);
+    log.debug("Docker- status {}", cmd);
+    response.addStatusCommand(cmd);
+  }
+
+  @VisibleForTesting
+  protected void addGetConfigDockerCommand(String componentName,
+      String containerId, HeartBeatResponse response) throws SliderException {
+    assert getAmState().isApplicationLive();
+
+    StatusCommand cmd = new StatusCommand();
+    String clusterName = getClusterName();
+
+    cmd.setCommandType(AgentCommandType.STATUS_COMMAND);
+    cmd.setComponentName(componentName);
+    cmd.setServiceName(clusterName);
+    cmd.setClusterName(clusterName);
+    cmd.setRoleCommand(StatusCommand.GET_CONFIG_COMMAND);
+    Map<String, String> hostLevelParams = new TreeMap<String, String>();
+    hostLevelParams.put(CONTAINER_ID, containerId);
+    cmd.setHostLevelParams(hostLevelParams);
+
+    hostLevelParams.put(CONTAINER_ID, containerId);
+
+    ConfTreeOperations appConf = getAmState().getAppConfSnapshot();
+    Map<String, Map<String, String>> configurations = buildCommandConfigurations(
+        appConf, containerId, componentName);
+    Map<String, String> dockerConfig = new HashMap<String, String>();
+    String statusCommand = getConfigFromMetaInfoWithAppConfigOverriding(componentName, "statusCommand");
+    if (statusCommand == null) {
+      statusCommand = "docker top "
+            + containerId
+            + " | grep \"\"";// default value
+    }
+    dockerConfig.put("docker.status_command",statusCommand);
+    configurations.put("docker", dockerConfig);
 
     cmd.setConfigurations(configurations);
+    log.debug("Docker- getconfig command {}", cmd);
 
     response.addStatusCommand(cmd);
+  }
+  
+  private String getConfigFromMetaInfoWithAppConfigOverriding(String componentName, String configName){
+    ConfTreeOperations appConf = getAmState().getAppConfSnapshot();
+    String containerName = getMetaInfo().getApplicationComponent(componentName)
+        .getDockerContainers().get(0).getName();
+    String composedConfigName = null;
+    String appConfigValue = null;
+    //if the configName is about port , mount, inputfile, then check differently
+    if (configName.equals("containerPort") || configName.equals("hostPort")){
+      composedConfigName = containerName + ".ports." + configName;
+    } else 
+    if (configName.equals("containerMount")
+        || configName.equals("hostMount")){
+      composedConfigName = containerName + ".mounts." + configName;
+    } else
+    if (configName.equals("containerPath")
+        || configName.equals("fileLocalPath")) {
+      composedConfigName = containerName + ".inputFiles." + configName;
+    } else {
+      composedConfigName = containerName + "." + configName;
+    }
+    appConfigValue = appConf.getComponentOpt(componentName, composedConfigName,
+        null);
+    log.debug(
+        "Docker- value from appconfig component: {} configName: {} value: {}",
+        componentName, composedConfigName, appConfigValue);
+    if (appConfigValue == null) {
+      appConfigValue = getConfigFromMetaInfo(componentName, configName);
+      log.debug(
+          "Docker- value from metainfo component: {} configName: {} value: {}",
+          componentName, configName, appConfigValue);
+
+    }
+    return appConfigValue;
+  }
+
+  @VisibleForTesting
+  protected void addStartDockerCommand(String componentName,
+      String containerId, HeartBeatResponse response,
+      ComponentCommand startCommand, long timeout, boolean isMarkedAutoRestart)
+      throws
+      SliderException {
+    assert getAmState().isApplicationLive();
+    ConfTreeOperations appConf = getAmState().getAppConfSnapshot();
+    ConfTreeOperations internalsConf = getAmState().getInternalsSnapshot();
+
+    ExecutionCommand cmd = new ExecutionCommand(AgentCommandType.EXECUTION_COMMAND);
+    prepareExecutionCommand(cmd);
+    String clusterName = internalsConf.get(OptionKeys.APPLICATION_NAME);
+    String hostName = getClusterInfoPropertyValue(StatusKeys.INFO_AM_HOSTNAME);
+    cmd.setHostname(hostName);
+    cmd.setClusterName(clusterName);
+    cmd.setRoleCommand(Command.START.toString());
+    cmd.setServiceName(clusterName);
+    cmd.setComponentName(componentName);
+    cmd.setRole(componentName);
+    Map<String, String> hostLevelParams = new TreeMap<>();
+    hostLevelParams.put(CONTAINER_ID, containerId);
+    cmd.setHostLevelParams(hostLevelParams);
+
+    Map<String, String> roleParams = new TreeMap<>();
+    cmd.setRoleParams(roleParams);
+    cmd.getRoleParams().put("auto_restart", Boolean.toString(isMarkedAutoRestart));
+    startCommand = new ComponentCommand();
+    startCommand.setName("START");
+    startCommand.setType("docker");
+    startCommand.setExec("exec");
+    cmd.setCommandParams(setCommandParameters(startCommand, timeout, true));
+    
+    Map<String, Map<String, String>> configurations = buildCommandConfigurations(
+        appConf, containerId, componentName);
+    Map<String, Map<String, String>> componentConfigurations = buildComponentConfigurations(appConf);
+    cmd.setComponentConfigurations(componentConfigurations);
+    
+    log.debug("before resolution: " + appConf.toString());
+    resolveVariablesForComponentAppConfigs(appConf, componentName, containerId);
+    log.debug("after resolution: " + appConf.toString());
+
+    Map<String, String> dockerConfig = new HashMap<String, String>();
+    dockerConfig.put(
+        "docker.command_path",
+        getConfigFromMetaInfoWithAppConfigOverriding(componentName,
+            "commandPath"));
+    dockerConfig.put("docker.image_name",
+        getConfigFromMetaInfo(componentName, "image"));
+    // options should always have -d
+    String options = getConfigFromMetaInfoWithAppConfigOverriding(
+        componentName, "options");
+    if(options != null && !options.isEmpty()){
+      options = options + " -d";
+    } else {
+      options = "-d";
+    }
+    dockerConfig.put("docker.options", options);
+    // options should always have -d
+    dockerConfig.put(
+        "docker.containerPort",
+        getConfigFromMetaInfoWithAppConfigOverriding(componentName,
+            "containerPort"));
+    dockerConfig
+        .put(
+            "docker.hostPort",
+            getConfigFromMetaInfoWithAppConfigOverriding(componentName,
+                "hostPort"));
+
+    dockerConfig.put(
+        "docker.mounting_directory",
+        getConfigFromMetaInfoWithAppConfigOverriding(componentName,
+            "containerMount"));
+    dockerConfig
+        .put(
+            "docker.host_mounting_directory",
+            getConfigFromMetaInfoWithAppConfigOverriding(componentName,
+                "hostMount"));
+
+    dockerConfig.put("docker.additional_param",
+        getConfigFromMetaInfoWithAppConfigOverriding(componentName, "additionalParam"));
+
+    dockerConfig.put("docker.input_file.mount_path", getConfigFromMetaInfo(
+        componentName, "containerPath"));
+    configurations.put("docker", dockerConfig);
+    String statusCommand = getConfigFromMetaInfoWithAppConfigOverriding(
+        componentName, "statusCommand");
+    if (statusCommand == null) {
+      statusCommand = "docker top "
+          + containerId + " | grep \"\"";// default value
+    }
+    dockerConfig.put("docker.status_command",statusCommand);
+    
+    cmd.setConfigurations(configurations);
+   // configurations.get("global").put("exec_cmd", startCommand.getExec());
+    cmd.addContainerDetails(componentName, getMetaInfo());
+
+    log.info("Docker- command: {}", cmd.toString());
+
+    response.addExecutionCommand(cmd);
+  }
+
+  private void resolveVariablesForComponentAppConfigs(
+      ConfTreeOperations appConf, String componentName, String containerId)
+      throws SliderException {
+    Map<String, String> tokens = getStandardTokenMap(appConf, componentName);
+    addRoleRelatedTokens(tokens);
+    log.debug("docker- tokens: {}", tokens);
+    
+    MapOperations compConf = appConf.getComponent(componentName);
+    if (compConf == null){
+      return;
+    }
+    for(Entry<String, String> element: compConf.entrySet()){
+      
+      log.debug("docker- key: {} value: {}", element.getKey(), element.getValue());
+      
+      Object value = element.getValue();
+      if (value instanceof String){
+        String valueStr = (String)value;
+        
+        //resolving host names
+        for (Map.Entry<String,String> token : tokens.entrySet()) {
+          valueStr = valueStr.replaceAll(Pattern.quote(token.getKey()),
+                                   token.getValue());
+          compConf.put(element.getKey(), valueStr);
+        }
+
+        // resolving container ids
+        if (valueStr.contains("${CONTAINER_ID}")) {
+          valueStr = valueStr.replace("${CONTAINER_ID}",
+              containerId);
+          compConf.put(element.getKey(), valueStr);
+        }
+      }
+    }
+  }
+
+  private String getConfigFromMetaInfo(String componentName, String configName) {
+    String result = null;
+
+    List<DockerContainer> containers = getMetaInfo().getApplicationComponent(
+        componentName).getDockerContainers();// to support multi container per
+                                             // component later
+    log.debug("Docker- containers metainfo: {}", containers.toString());
+    if (containers.size() > 0) {
+      DockerContainer container = containers.get(0);
+      
+      switch (configName) {
+      case "image":
+        result = container.getImage();
+        break;
+      case "statusCommand":
+        result = container.getStatusCommand();
+        break;
+      case "commandPath":
+        result = container.getCommandPath();
+        break;
+      case "options":
+        result = container.getOptions();
+        break;
+      case "containerPort":
+        result = container.getPorts().size() > 0 ? container.getPorts().get(0)
+            .getContainerPort() : null;// to support
+        // multi port
+        // later
+        break;
+      case "hostPort":
+        result = container.getPorts().size() > 0 ? container.getPorts().get(0)
+            .getHostPort() : null;// to support multi
+        // port later
+        break;
+      case "containerMount":
+        result = container.getMounts().size() > 0 ? container.getMounts()
+            .get(0).getContainerMount() : null;// to support
+        // multi port
+        // later
+        break;
+      case "hostMount":
+        result = container.getMounts().size() > 0 ? container.getMounts()
+            .get(0).getHostMount() : null;// to support multi
+        // port later
+        break;
+      case "additionalParam":
+        result = container.getAdditionalParam();// to support multi port later
+        break;
+      default:
+        break;
+      }
+    }
+    log.debug("Docker- component: {} configName: {} value: {}", componentName, configName, result);
+    return result;
   }
 
   @VisibleForTesting
@@ -1696,7 +2463,9 @@ public class AgentProviderService extends AbstractProviderService implements
 
   @VisibleForTesting
   protected void addStartCommand(String componentName, String containerId, HeartBeatResponse response,
-                                 String scriptPath, long timeout, boolean isMarkedAutoRestart)
+                                 String scriptPath, ComponentCommand startCommand,
+                                 ComponentCommand stopCommand,
+                                 long timeout, boolean isMarkedAutoRestart)
       throws
       SliderException {
     assert getAmState().isApplicationLive();
@@ -1713,22 +2482,33 @@ public class AgentProviderService extends AbstractProviderService implements
     cmd.setServiceName(clusterName);
     cmd.setComponentName(componentName);
     cmd.setRole(componentName);
-    Map<String, String> hostLevelParams = new TreeMap<String, String>();
-    hostLevelParams.put(JAVA_HOME, appConf.getGlobalOptions().getMandatoryOption(JAVA_HOME));
+    Map<String, String> hostLevelParams = new TreeMap<>();
+    hostLevelParams.put(JAVA_HOME, appConf.getGlobalOptions().getOption(JAVA_HOME, getJDKDir()));
     hostLevelParams.put(CONTAINER_ID, containerId);
     cmd.setHostLevelParams(hostLevelParams);
 
-    Map<String, String> roleParams = new TreeMap<String, String>();
+    Map<String, String> roleParams = new TreeMap<>();
     cmd.setRoleParams(roleParams);
     cmd.getRoleParams().put("auto_restart", Boolean.toString(isMarkedAutoRestart));
 
-    cmd.setCommandParams(setCommandParameters(scriptPath, timeout, true));
-
     Map<String, Map<String, String>> configurations = buildCommandConfigurations(appConf, containerId, componentName);
-
     cmd.setConfigurations(configurations);
-    response.addExecutionCommand(cmd);
+    Map<String, Map<String, String>> componentConfigurations = buildComponentConfigurations(appConf);
+    cmd.setComponentConfigurations(componentConfigurations);
     
+    if (SliderUtils.isSet(scriptPath)) {
+      cmd.setCommandParams(commandParametersSet(scriptPath, timeout, true));
+    } else {
+      if (startCommand == null) {
+        throw new SliderException("Expected START command not found for component " + componentName);
+      }
+      cmd.setCommandParams(commandParametersSet(startCommand, timeout, true));
+      configurations.get("global").put("exec_cmd", startCommand.getExec());
+    }
+
+    response.addExecutionCommand(cmd);
+
+    log.debug("command looks like: {}", cmd);
     // With start command, the corresponding command for graceful stop needs to
     // be sent. This will be used when a particular container is lost as per RM,
     // but then the agent is still running and heart-beating to the Slider AM.
@@ -1744,21 +2524,109 @@ public class AgentProviderService extends AbstractProviderService implements
     cmdStop.setRole(componentName);
     Map<String, String> hostLevelParamsStop = new TreeMap<String, String>();
     hostLevelParamsStop.put(JAVA_HOME, appConf.getGlobalOptions()
-        .getMandatoryOption(JAVA_HOME));
+        .getOption(JAVA_HOME, ""));
     hostLevelParamsStop.put(CONTAINER_ID, containerId);
     cmdStop.setHostLevelParams(hostLevelParamsStop);
 
     Map<String, String> roleParamsStop = new TreeMap<String, String>();
     cmdStop.setRoleParams(roleParamsStop);
     cmdStop.getRoleParams().put("auto_restart",
-        Boolean.toString(isMarkedAutoRestart));
+                                Boolean.toString(isMarkedAutoRestart));
 
-    cmdStop.setCommandParams(setCommandParameters(scriptPath, timeout, true));
+    if (SliderUtils.isSet(scriptPath)) {
+      cmdStop.setCommandParams(commandParametersSet(scriptPath, timeout, true));
+    } else {
+      if (stopCommand == null) {
+        stopCommand = ComponentCommand.getDefaultComponentCommand("STOP");
+      }
+      cmd.setCommandParams(commandParametersSet(stopCommand, timeout, true));
+      configurations.get("global").put("exec_cmd", startCommand.getExec());
+    }
+
 
     Map<String, Map<String, String>> configurationsStop = buildCommandConfigurations(
         appConf, containerId, componentName);
     cmdStop.setConfigurations(configurationsStop);
     response.addExecutionCommand(cmdStop);
+  }
+
+  @VisibleForTesting
+  protected void addUpgradeCommand(String componentName, String containerId,
+      HeartBeatResponse response, String scriptPath, long timeout)
+      throws SliderException {
+    assert getAmState().isApplicationLive();
+    ConfTreeOperations appConf = getAmState().getAppConfSnapshot();
+    ConfTreeOperations internalsConf = getAmState().getInternalsSnapshot();
+
+    ExecutionCommand cmd = new ExecutionCommand(
+        AgentCommandType.EXECUTION_COMMAND);
+    prepareExecutionCommand(cmd);
+    String clusterName = internalsConf.get(OptionKeys.APPLICATION_NAME);
+    String hostName = getClusterInfoPropertyValue(StatusKeys.INFO_AM_HOSTNAME);
+    cmd.setHostname(hostName);
+    cmd.setClusterName(clusterName);
+    cmd.setRoleCommand(Command.UPGRADE.toString());
+    cmd.setServiceName(clusterName);
+    cmd.setComponentName(componentName);
+    cmd.setRole(componentName);
+    Map<String, String> hostLevelParams = new TreeMap<String, String>();
+    hostLevelParams.put(JAVA_HOME, appConf.getGlobalOptions()
+        .getMandatoryOption(JAVA_HOME));
+    hostLevelParams.put(CONTAINER_ID, containerId);
+    cmd.setHostLevelParams(hostLevelParams);
+    cmd.setCommandParams(commandParametersSet(scriptPath, timeout, true));
+
+    Map<String, Map<String, String>> configurations = buildCommandConfigurations(
+        appConf, containerId, componentName);
+    cmd.setConfigurations(configurations);
+    response.addExecutionCommand(cmd);
+  }
+    
+  protected void addStopCommand(String componentName, String containerId,
+      HeartBeatResponse response, String scriptPath, long timeout,
+      boolean isInUpgradeMode) throws SliderException {
+    assert getAmState().isApplicationLive();
+    ConfTreeOperations appConf = getAmState().getAppConfSnapshot();
+    ConfTreeOperations internalsConf = getAmState().getInternalsSnapshot();
+
+    ExecutionCommand cmdStop = new ExecutionCommand(
+        AgentCommandType.EXECUTION_COMMAND);
+    cmdStop.setTaskId(taskId.get());
+    cmdStop.setCommandId(cmdStop.getTaskId() + "-1");
+    String clusterName = internalsConf.get(OptionKeys.APPLICATION_NAME);
+    String hostName = getClusterInfoPropertyValue(StatusKeys.INFO_AM_HOSTNAME);
+    cmdStop.setHostname(hostName);
+    cmdStop.setClusterName(clusterName);
+    // Upgrade stop is differentiated by passing a transformed role command -
+    // UPGRADE_STOP
+    cmdStop.setRoleCommand(Command.transform(Command.STOP, isInUpgradeMode));
+    cmdStop.setServiceName(clusterName);
+    cmdStop.setComponentName(componentName);
+    cmdStop.setRole(componentName);
+    Map<String, String> hostLevelParamsStop = new TreeMap<String, String>();
+    hostLevelParamsStop.put(JAVA_HOME, appConf.getGlobalOptions()
+        .getMandatoryOption(JAVA_HOME));
+    hostLevelParamsStop.put(CONTAINER_ID, containerId);
+    cmdStop.setHostLevelParams(hostLevelParamsStop);
+    cmdStop.setCommandParams(commandParametersSet(scriptPath, timeout, true));
+
+    Map<String, Map<String, String>> configurationsStop = buildCommandConfigurations(
+        appConf, containerId, componentName);
+    cmdStop.setConfigurations(configurationsStop);
+    response.addExecutionCommand(cmdStop);
+  }
+
+  protected static String getJDKDir() {
+    File javaHome = new File(System.getProperty("java.home")).getParentFile();
+    File jdkDirectory = null;
+    if (javaHome.getName().contains("jdk")) {
+      jdkDirectory = javaHome;
+    }
+    if (jdkDirectory != null) {
+      return jdkDirectory.getAbsolutePath();
+    } else {
+      return "";
+    }
   }
 
   protected Map<String, String> getAllocatedPorts() {
@@ -1787,7 +2655,7 @@ public class AgentProviderService extends AbstractProviderService implements
 
     Map<String, Map<String, String>> configurations =
         new TreeMap<String, Map<String, String>>();
-    Map<String, String> tokens = getStandardTokenMap(appConf);
+    Map<String, String> tokens = getStandardTokenMap(appConf, componentName);
 
     Set<String> configs = new HashSet<String>();
     configs.addAll(getApplicationConfigurationTypes());
@@ -1829,7 +2697,8 @@ public class AgentProviderService extends AbstractProviderService implements
     }
   }
 
-  private Map<String, String> getStandardTokenMap(ConfTreeOperations appConf) throws SliderException {
+  private Map<String, String> getStandardTokenMap(ConfTreeOperations appConf,
+      String componentName) throws SliderException {
     Map<String, String> tokens = new HashMap<String, String>();
     String nnuri = appConf.get("site.fs.defaultFS");
     tokens.put("${NN_URI}", nnuri);
@@ -1841,6 +2710,10 @@ public class AgentProviderService extends AbstractProviderService implements
         .getGlobalOptions()
         .getMandatoryOption(InternalKeys.INTERNAL_DATA_DIR_PATH));
     tokens.put("${JAVA_HOME}", appConf.get(AgentKeys.JAVA_HOME));
+<<<<<<< HEAD
+=======
+    tokens.put("${COMPONENT_NAME}", componentName);
+>>>>>>> refs/remotes/apache/develop
     return tokens;
   }
 
@@ -1865,7 +2738,7 @@ public class AgentProviderService extends AbstractProviderService implements
     List<String> configList = new ArrayList<String>();
     configList.add(GLOBAL_CONFIG_TAG);
 
-    List<ConfigFile> configFiles = getMetainfo().getApplication().getConfigFiles();
+    List<ConfigFile> configFiles = getMetaInfo().getApplication().getConfigFiles();
     for (ConfigFile configFile : configFiles) {
       log.info("Expecting config type {}.", configFile.getDictionaryName());
       configList.add(configFile.getDictionaryName());
@@ -1950,10 +2823,10 @@ public class AgentProviderService extends AbstractProviderService implements
     config.put("app_container_tag", tags.getTag(roleName, containerId));
 
     // add optional parameters only if they are not already provided
-    if(!config.containsKey("pid_file")) {
+    if (!config.containsKey("pid_file")) {
       config.put("pid_file", "${AGENT_WORK_ROOT}/app/run/component.pid");
     }
-    if(!config.containsKey("app_root")) {
+    if (!config.containsKey("app_root")) {
       config.put("app_root", "${AGENT_WORK_ROOT}/app/install");
     }
   }

@@ -19,14 +19,15 @@
 package org.apache.slider.server.appmaster.state;
 
 import com.google.common.base.Preconditions;
-import org.apache.hadoop.yarn.api.records.Container;
-import org.apache.hadoop.yarn.api.records.ContainerId;
-import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.registry.client.binding.RegistryTypeUtils;
 import org.apache.hadoop.registry.client.types.Endpoint;
 import org.apache.hadoop.registry.client.types.ProtocolTypes;
-import org.apache.slider.api.ClusterDescription;
+import org.apache.hadoop.yarn.api.records.Container;
+import org.apache.hadoop.yarn.api.records.ContainerId;
+import org.apache.hadoop.yarn.api.records.NodeId;
+import org.apache.slider.api.ClusterNode;
 import org.apache.slider.api.proto.Messages;
+import org.apache.slider.api.types.ContainerInformation;
 import org.apache.slider.common.tools.SliderUtils;
 
 import java.util.ArrayList;
@@ -40,8 +41,7 @@ public final class RoleInstance implements Cloneable {
 
   public Container container;
   /**
-   * UUID of container used in Slider RPC to refer to instances. 
-   * The string value of the container ID is used here.
+   * Container ID
    */
   public final String id;
   public long createTime;
@@ -56,10 +56,19 @@ public final class RoleInstance implements Cloneable {
    * Name of the role
    */
   public String role;
+
+  /**
+   * Version of the app
+   */
+  public String appVersion;
+
+  /**
+   * Role Id; matches priority in resources.json
+   */
   public int roleId;
 
   /**
-   * state from {@link ClusterDescription}
+   * state from StateValues
    */
   public int state;
 
@@ -91,14 +100,23 @@ public final class RoleInstance implements Cloneable {
   
   public String host;
   public String hostURL;
+  public ContainerAllocationOutcome placement;
 
 
   /**
    * A list of registered endpoints.
    */
   private List<Endpoint> endpoints =
-      new ArrayList<Endpoint>(2);
+      new ArrayList<>(2);
 
+  public RoleInstance(ContainerAssignment assignment) {
+    this(assignment.container);
+    placement = assignment.placement;
+  }
+  /**
+   * Create an instance to track an allocated container
+   * @param container a container which must be non null, and have a non-null Id field.
+   */
   public RoleInstance(Container container) {
     Preconditions.checkNotNull(container, "Null container");
     Preconditions.checkState(container.getId() != null, 
@@ -136,6 +154,7 @@ public final class RoleInstance implements Cloneable {
     sb.append(", host=").append(host);
     sb.append(", hostURL=").append(hostURL);
     sb.append(", state=").append(state);
+    sb.append(", placement=").append(placement);
     sb.append(", exitCode=").append(exitCode);
     sb.append(", command='").append(command).append('\'');
     sb.append(", diagnostics='").append(diagnostics).append('\'');
@@ -186,9 +205,46 @@ public final class RoleInstance implements Cloneable {
     builder.setStartTime(startTime);
     builder.setHost(host);
     builder.setHostURL(hostURL);
+    if (appVersion != null) {
+      builder.setAppVersion(appVersion);
+    }
     return builder.build();
   }
 
+  /**
+   * Build a serializable ClusterNode structure from this instance.
+   * This operation is unsynchronized.
+   * @return a serialized value.
+   */
+  public ClusterNode toClusterNode() {
+    ClusterNode node;
+    if (container != null) {
+      node = new ClusterNode(container.getId());
+    } else {
+      node = new ClusterNode();
+      node.name = "unallocated instance";
+    }
+    node.command = command;
+    node.createTime = createTime;
+    node.diagnostics = diagnostics;
+    if (environment != null) {
+      node.environment = Arrays.copyOf(environment, environment.length);
+    }
+    node.exitCode = exitCode;
+    node.host = host;
+    node.hostUrl = hostURL;
+    if (output != null) {
+      node.output = Arrays.copyOf(output, output.length);
+    }
+    node.released = released;
+    node.role = role;
+    node.roleId = roleId;
+    node.startTime = startTime ;
+    node.state = state;
+    
+    return node;
+  }
+  
   /**
    * Clone operation clones all the simple values but shares the 
    * Container object into the cloned copy -same with the output,
@@ -233,5 +289,30 @@ public final class RoleInstance implements Cloneable {
             ProtocolTypes.PROTOCOL_TCP, host, port);
     addEndpoint(epr);
   }
-  
+
+  /**
+   * Serialize. Some data structures (e.g output)
+   * may be shared
+   * @return a serialized form for marshalling as JSON
+   */
+  public ContainerInformation serialize() {
+    ContainerInformation info = new ContainerInformation();
+    info.containerId = id;
+    info.component = role;
+    info.appVersion = appVersion;
+    info.startTime = startTime;
+    info.createTime = createTime;
+    info.diagnostics = diagnostics;
+    info.state = state;
+    info.host = host;
+    info.hostURL = hostURL;
+    info.released = released ? Boolean.TRUE : null;
+    if (placement != null) {
+      info.placement = placement.toString();
+    }
+    if (output != null) {
+      info.output = output;
+    }
+    return info;
+  }
 }

@@ -30,43 +30,54 @@ import java.io.IOException;
  * Cluster protocol. This can currently act as a versioned IPC
  * endpoint or be relayed via protobuf
  */
-@KerberosInfo(
-  serverPrincipal = SliderXmlConfKeys.KEY_KERBEROS_PRINCIPAL)
+@KerberosInfo(serverPrincipal = SliderXmlConfKeys.KEY_KERBEROS_PRINCIPAL)
 public interface SliderClusterProtocol extends VersionedProtocol {
-  public static final long versionID = 0x01;
+  long versionID = 0x01;
 
   /**
    * Stop the cluster
    */
 
-  
   Messages.StopClusterResponseProto stopCluster(Messages.StopClusterRequestProto request) throws
                                                                                           IOException, YarnException;
-
+  /**
+   * Upgrade the application containers
+   * 
+   * @param request upgrade containers request object
+   * @return upgrade containers response object
+   * @throws IOException
+   * @throws YarnException
+   */
+  Messages.UpgradeContainersResponseProto upgradeContainers(
+      Messages.UpgradeContainersRequestProto request) throws IOException,
+      YarnException;
 
   /**
    * Flex the cluster. 
    */
-  Messages.FlexClusterResponseProto flexCluster(Messages.FlexClusterRequestProto request) throws IOException,
-                                                                                                 YarnException;
+  Messages.FlexClusterResponseProto flexCluster(Messages.FlexClusterRequestProto request)
+      throws IOException;
 
 
   /**
    * Get the current cluster status
    */
-  Messages.GetJSONClusterStatusResponseProto getJSONClusterStatus(Messages.GetJSONClusterStatusRequestProto request) throws IOException, YarnException;
+  Messages.GetJSONClusterStatusResponseProto getJSONClusterStatus(Messages.GetJSONClusterStatusRequestProto request)
+      throws IOException, YarnException;
 
 
   /**
    * List all running nodes in a role
    */
-  Messages.ListNodeUUIDsByRoleResponseProto listNodeUUIDsByRole(Messages.ListNodeUUIDsByRoleRequestProto request) throws IOException, YarnException;
+  Messages.ListNodeUUIDsByRoleResponseProto listNodeUUIDsByRole(Messages.ListNodeUUIDsByRoleRequestProto request)
+      throws IOException, YarnException;
 
 
   /**
    * Get the details on a node
    */
-  Messages.GetNodeResponseProto getNode(Messages.GetNodeRequestProto request) throws IOException, YarnException;
+  Messages.GetNodeResponseProto getNode(Messages.GetNodeRequestProto request)
+      throws IOException, YarnException;
 
   /**
    * Get the 
@@ -74,7 +85,8 @@ public interface SliderClusterProtocol extends VersionedProtocol {
    * Unknown nodes are not returned
    * <i>Important: the order of the results are undefined</i>
    */
-  Messages.GetClusterNodesResponseProto getClusterNodes(Messages.GetClusterNodesRequestProto request) throws IOException, YarnException;
+  Messages.GetClusterNodesResponseProto getClusterNodes(Messages.GetClusterNodesRequestProto request)
+      throws IOException, YarnException;
 
   /**
    * Echo back the submitted text (after logging it).
@@ -94,7 +106,8 @@ public interface SliderClusterProtocol extends VersionedProtocol {
    * @throws IOException
    * @throws YarnException
    */
-  Messages.KillContainerResponseProto killContainer(Messages.KillContainerRequestProto request) throws IOException, YarnException;
+  Messages.KillContainerResponseProto killContainer(Messages.KillContainerRequestProto request)
+      throws IOException, YarnException;
 
   /**
    * AM to commit suicide. If the Hadoop halt entry point has not been disabled,
@@ -104,9 +117,8 @@ public interface SliderClusterProtocol extends VersionedProtocol {
    * @throws IOException
    * @throws YarnException
    */
-  Messages.AMSuicideResponseProto amSuicide(Messages.AMSuicideRequestProto request) throws
-                                                                                    IOException,
-                                                                                    YarnException;
+  Messages.AMSuicideResponseProto amSuicide(Messages.AMSuicideRequestProto request)
+      throws IOException;
 
   /**
    * Get the instance definition
@@ -114,4 +126,54 @@ public interface SliderClusterProtocol extends VersionedProtocol {
   Messages.GetInstanceDefinitionResponseProto getInstanceDefinition(
     Messages.GetInstanceDefinitionRequestProto request)
     throws IOException, YarnException;
+
+  /**
+   * Get the application liveness
+   * @return current liveness information
+   * @throws IOException
+   */
+  Messages.ApplicationLivenessInformationProto getLivenessInformation(
+      Messages.GetApplicationLivenessRequestProto request
+  ) throws IOException;
+
+  Messages.GetLiveContainersResponseProto getLiveContainers(
+      Messages.GetLiveContainersRequestProto request
+  ) throws IOException;
+
+  Messages.ContainerInformationProto getLiveContainer(
+      Messages.GetLiveContainerRequestProto request
+  ) throws IOException;
+
+  Messages.GetLiveComponentsResponseProto getLiveComponents(
+      Messages.GetLiveComponentsRequestProto request
+  ) throws IOException;
+
+  Messages.ComponentInformationProto getLiveComponent(
+      Messages.GetLiveComponentRequestProto request
+  ) throws IOException;
+
+  Messages.GetLiveNodesResponseProto getLiveNodes(
+      Messages.GetLiveNodesRequestProto request
+  ) throws IOException;
+
+  Messages.NodeInformationProto getLiveNode(
+      Messages.GetLiveNodeRequestProto request
+  ) throws IOException;
+
+  Messages.WrappedJsonProto getModelDesired(Messages.EmptyPayloadProto request) throws IOException;
+
+  Messages.WrappedJsonProto getModelDesiredAppconf(Messages.EmptyPayloadProto request) throws IOException;
+
+  Messages.WrappedJsonProto getModelDesiredResources(Messages.EmptyPayloadProto request) throws IOException;
+
+  Messages.WrappedJsonProto getModelResolved(Messages.EmptyPayloadProto request) throws IOException;
+
+  Messages.WrappedJsonProto getModelResolvedAppconf(Messages.EmptyPayloadProto request) throws IOException;
+
+  Messages.WrappedJsonProto getModelResolvedResources(Messages.EmptyPayloadProto request) throws IOException;
+
+  Messages.WrappedJsonProto getLiveResources(Messages.EmptyPayloadProto request) throws IOException;
+
+  Messages.GetCertificateStoreResponseProto getClientCertificateStore(Messages.GetCertificateStoreRequestProto request)
+      throws IOException;
 }

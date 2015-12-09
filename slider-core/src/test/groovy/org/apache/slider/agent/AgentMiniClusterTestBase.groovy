@@ -27,9 +27,9 @@ import org.apache.commons.io.FileUtils
 import org.apache.slider.client.SliderClient
 import org.apache.slider.common.SliderXMLConfKeysForTesting
 import org.apache.slider.common.params.Arguments
-import org.apache.slider.common.tools.SliderUtils
 import org.apache.slider.core.main.ServiceLauncher
 import org.apache.slider.providers.agent.AgentKeys
+import org.apache.slider.test.KeysForTests
 import org.apache.slider.test.YarnZKMiniClusterTestBase
 import org.junit.AfterClass
 import org.junit.BeforeClass
@@ -41,7 +41,7 @@ import org.junit.rules.TemporaryFolder
 @CompileStatic
 @Slf4j
 public abstract class AgentMiniClusterTestBase
-extends YarnZKMiniClusterTestBase {
+extends YarnZKMiniClusterTestBase implements KeysForTests {
   protected static File agentConf
   protected static File agentDef
   protected static Map<String, String> agentDefOptions
@@ -58,7 +58,8 @@ extends YarnZKMiniClusterTestBase {
   @BeforeClass
   public static void createSubConfFiles() {
 
-    File destDir = new File("target/agent_minicluster_testbase")
+    String s = File.separator
+    File destDir = new File("target${s}agent_minicluster_testbase")
     destDir.mkdirs()
     agentConf = new File(destDir, "agentconf.zip")
     agentConf.createNewFile()
@@ -69,7 +70,7 @@ extends YarnZKMiniClusterTestBase {
     tempFolder.create()
     def pkgPath = tempFolder.newFolder("testpkg")
     File imagePath = new File(pkgPath, "appdef_1.zip").canonicalFile
-    File metainfo = new File(new File(".").absoluteFile, "src/test/python/metainfo.xml");
+    File metainfo = new File(new File(".").absoluteFile, "src${s}test${s}python${s}metainfo.xml");
     ZipArchiveOutputStream zipFile = new ZipArchiveOutputStream(new FileOutputStream(imagePath));
     try {
       zipFile.putArchiveEntry(new ZipArchiveEntry(metainfo.name));
@@ -88,7 +89,7 @@ extends YarnZKMiniClusterTestBase {
 
   @AfterClass
   public static void cleanSubConfFiles() {
-    def tempRoot
+    def tempRoot = ""
     try {
       tempRoot = tempFolder.root
       if (tempRoot.exists()) {
@@ -97,10 +98,37 @@ extends YarnZKMiniClusterTestBase {
     } catch (IOException e) {
       log.info("Failed to delete $tempRoot :$e", e)
     } catch (IllegalStateException e) {
-      log.warn("Temp folder deletion failed: $e")
+      log.warn("Temp folder deletion failed: $e", e)
     }
   }
 
+  public static String createAddOnPackageFiles() {
+    String s = File.separator
+
+    File destDir = new File("target${s}agent_minicluster_testbase_addon")
+    destDir.mkdirs()
+    File addonAgentConf = new File(destDir, "addon1.zip")
+    addonAgentConf.createNewFile()
+
+    // dynamically create the app package for the test
+    TemporaryFolder addonTempFolder = new TemporaryFolder();
+    addonTempFolder.create()
+    def pkgPath = addonTempFolder.newFolder("testpkg")
+    File imagePath = new File(pkgPath, "appdef_1.zip").canonicalFile
+    File metainfo = new File(new File(".").absoluteFile,
+      "src${s}test${s}python${s}metainfo.xml");
+    ZipArchiveOutputStream zipFile = new ZipArchiveOutputStream(
+      new FileOutputStream(imagePath));
+    try {
+      zipFile.putArchiveEntry(new ZipArchiveEntry(metainfo.name));
+      IOUtils.copy(new FileInputStream(metainfo), zipFile);
+      zipFile.closeArchiveEntry();
+    }
+    finally {
+      zipFile.close();
+    }
+    return addonAgentConf.toURI().toString()
+  }
 
   @Override
   public String getTestConfigurationPath() {

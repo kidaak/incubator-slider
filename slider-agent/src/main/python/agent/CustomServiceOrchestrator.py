@@ -52,6 +52,7 @@ class CustomServiceOrchestrator():
 
   def __init__(self, config, controller, agentToggleLogger):
     self.config = config
+    self.controller = controller
     self.tmp_dir = config.getResolvedPath(AgentConfig.APP_TASK_DIR)
     self.python_executor = PythonExecutor(self.tmp_dir, config, agentToggleLogger)
     self.status_commands_stdout = os.path.realpath(posixpath.join(self.tmp_dir,
@@ -76,23 +77,60 @@ class CustomServiceOrchestrator():
                  override_output_files=True, store_command=False):
     allocated_ports = {}
     try:
+      py_file_list = []
+      json_path = None
+
       script_type = command['commandParams']['script_type']
-      script = command['commandParams']['script']
-      timeout = int(command['commandParams']['command_timeout'])
       task_id = command['taskId']
       command_name = command['roleCommand']
-
-      script_path = self.resolve_script_path(self.base_dir, script, script_type)
-      script_tuple = (script_path, self.base_dir)
+      # transform upgrade specific command names
+      if command_name == 'UPGRADE':
+          command_name = 'PRE_UPGRADE'
+      if command_name == 'UPGRADE_STOP':
+        command_name = 'STOP'
 
       tmpstrucoutfile = os.path.realpath(posixpath.join(self.tmp_dir,
                                                         "structured-out-{0}.json".format(task_id)))
-      if script_type.upper() != self.SCRIPT_TYPE_PYTHON:
-      # We don't support anything else yet
+      if script_type.upper() == self.SCRIPT_TYPE_PYTHON:
+        script = command['commandParams']['script']
+        timeout = int(command['commandParams']['command_timeout'])
+        script_path = ''
+        if 'package' in command:
+            add_on_dir_str = (self.config.getWorkRootPath()
+                              + "/"
+                              + AgentConfig.ADDON_PKG_ROOT_DIR
+                              + "/application.addon."
+                              + command['package']
+                             )
+            command['commandParams']['addonPackageRoot'] = add_on_dir_str
+            add_on_base_dir = os.path.realpath(posixpath.join(add_on_dir_str, "package"))
+            logger.info("Add on package: %s, add on base dir: %s" 
+                        % (command['package'], str(add_on_base_dir)))
+            script_path = self.resolve_script_path(add_on_base_dir, script, script_type)
+        else:
+            self.base_dir = os.path.realpath(posixpath.join(
+                              self.config.getResolvedPath(AgentConfig.APP_PACKAGE_DIR),
+                              "package"))
+            logger.debug("Base dir: " + str(self.base_dir))
+            script_path = self.resolve_script_path(self.base_dir, script, script_type)
+        script_tuple = (script_path, self.base_dir)
+        py_file_list = [script_tuple]
+
+        json_path = self.dump_command_to_json(command, allocated_ports, store_command)
+      elif script_type.upper() == "SHELL":
+        timeout = int(command['commandParams']['command_timeout'])
+
+        json_path = self.dump_command_to_json(command, allocated_ports, store_command)
+        script_path = os.path.realpath(posixpath.join(self.config.getWorkRootPath(),
+                                        "infra", "agent", "slider-agent", "scripts",
+                                        "shell_cmd", "basic_installer.py"))
+        script_tuple = (script_path, self.base_dir)
+        py_file_list = [script_tuple]
+      else:
+        # We don't support anything else yet
         message = "Unknown script type {0}".format(script_type)
         raise AgentException(message)
-      json_path = self.dump_command_to_json(command, allocated_ports, store_command)
-      py_file_list = [script_tuple]
+
       # filter None values
       filtered_py_file_list = [i for i in py_file_list if i]
       logger_level = logging.getLevelName(logger.level)
@@ -239,12 +277,14 @@ class CustomServiceOrchestrator():
       os.unlink(file_path)
 
     self.finalize_command(command, store_command, allocated_ports)
+    self.finalize_exec_command(command)
 
     with os.fdopen(os.open(file_path, os.O_WRONLY | os.O_CREAT,
                            0644), 'w') as f:
       content = json.dumps(command, sort_keys=False, indent=4)
       f.write(content)
     return file_path
+
 
   """
   patch content
@@ -289,6 +329,28 @@ class CustomServiceOrchestrator():
       self.stored_command = command
 
   pass
+
+  """
+  configurations/global/exec_cmd should be resolved based on the rest of the config
+  {$conf:@//site/global/xmx_val} ==> command['configurations']['global']['xmx_val']
+  """
+  def finalize_exec_command(self, command):
+    variable_format = "{{$conf:@//site/{0}/{1}}}"
+    if 'configurations' in command:
+      if 'global' in command['configurations'] and 'exec_cmd' in command['configurations']['global']:
+        exec_cmd = command['configurations']['global']['exec_cmd']
+        for key in command['configurations']:
+          if len(command['configurations'][key]) > 0:
+            for k, value in command['configurations'][key].items():
+              replaced_key = variable_format.format(key, k)
+              exec_cmd = exec_cmd.replace(replaced_key, value)
+              pass
+            pass
+          pass
+        command['configurations']['global']['exec_cmd'] = exec_cmd
+      pass
+    pass
+
 
   """
   All unallocated ports should be set to 0

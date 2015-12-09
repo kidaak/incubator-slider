@@ -22,10 +22,27 @@ import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.client.api.AMRMClient;
 
+import java.util.List;
+
 public interface RMOperationHandlerActions {
+
+  /**
+   * Release an assigned container
+   * @param containerId container
+   */
   void releaseAssignedContainer(ContainerId containerId);
 
-  void addContainerRequest(AMRMClient.ContainerRequest req);
+  /**
+   * Issue a container request
+   * @param request
+   */
+  void addContainerRequest(AMRMClient.ContainerRequest request);
+
+  /**
+   * Cancel a specific request
+   * @param request request to cancel
+   */
+  void cancelSingleRequest(AMRMClient.ContainerRequest request);
 
   /**
    * Remove a container request
@@ -34,4 +51,10 @@ public interface RMOperationHandlerActions {
    * @param count number to remove
    */
   int cancelContainerRequests(Priority priority1, Priority priority2, int count);
+
+  /**
+   * Execute an entire list of operations
+   * @param operations ops
+   */
+  void execute(List<AbstractRMOperation> operations);
 }

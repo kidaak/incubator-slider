@@ -17,20 +17,13 @@
 package org.apache.slider.providers.agent.application.metadata;
 
 import org.apache.commons.digester.Digester;
-import org.xml.sax.SAXException;
-
-import java.io.IOException;
-import java.io.InputStream;
 
 /**
  *
  */
-public class MetainfoParser {
-
-  public Metainfo parse(InputStream metainfoStream) throws IOException {
-    Digester digester = new Digester();
-    digester.setValidating(false);
-
+public class MetainfoParser extends AbstractMetainfoParser{
+  
+  protected void composeSchema(Digester digester){
     digester.addObjectCreate("metainfo", Metainfo.class);
     digester.addBeanPropertySetter("metainfo/schemaVersion");
 
@@ -89,17 +82,5 @@ public class MetainfoParser {
     digester.addSetNext("*/configFile", "addConfigFile");
 
     digester.addSetRoot("*/application", "setApplication");
-
-    try {
-      return (Metainfo) digester.parse(metainfoStream);
-    } catch (IOException e) {
-
-    } catch (SAXException e) {
-
-    } finally {
-      metainfoStream.close();
-    }
-
-    return null;
   }
 }

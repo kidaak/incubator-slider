@@ -20,6 +20,9 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.slider.common.tools.SliderFileSystem;
 import org.apache.slider.common.tools.SliderUtils;
+import org.apache.slider.core.exceptions.BadConfigException;
+import org.apache.slider.providers.agent.application.metadata.AbstractMetainfoParser;
+import org.apache.slider.providers.agent.application.metadata.AddonPackageMetainfoParser;
 import org.apache.slider.providers.agent.application.metadata.DefaultConfig;
 import org.apache.slider.providers.agent.application.metadata.DefaultConfigParser;
 import org.apache.slider.providers.agent.application.metadata.Metainfo;
@@ -28,7 +31,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.FileNotFoundException;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -39,20 +41,36 @@ public class AgentUtils {
   private static final Logger log = LoggerFactory.getLogger(AgentUtils.class);
 
   public static Metainfo getApplicationMetainfo(SliderFileSystem fileSystem,
-                                                String appDef) throws IOException {
-    log.info("Reading metainfo at {}", appDef);
+      String metainfoPath, boolean metainfoForAddon) throws IOException,
+      BadConfigException {
+    log.info("Reading metainfo at {}", metainfoPath);
     FileSystem fs = fileSystem.getFileSystem();
-    Path appPath = new Path(appDef);
-    InputStream metainfoStream = SliderUtils.getApplicationResourceInputStream(
-        fs, appPath, "metainfo.xml");
-    if (metainfoStream == null) {
-      log.error("metainfo.xml is unavailable at {}.", appDef);
-      throw new FileNotFoundException("metainfo.xml is required in app package. " +
-                            appPath);
+    Path appPath = new Path(metainfoPath);
+
+    Metainfo metainfo = null;
+    AbstractMetainfoParser metainfoParser = null;
+    if (metainfoForAddon) {
+      metainfoParser = new AddonPackageMetainfoParser();
+    } else {
+      metainfoParser = new MetainfoParser();
+    }
+    InputStream metainfoJsonStream = SliderUtils.getApplicationResourceInputStream(
+        fs, appPath, "metainfo.json");
+    if (metainfoJsonStream == null) {
+      InputStream metainfoXMLStream = SliderUtils.getApplicationResourceInputStream(
+          fs, appPath, "metainfo.xml");
+      if (metainfoXMLStream != null) {
+        metainfo = metainfoParser.fromXmlStream(metainfoXMLStream);
+      }
+    } else {
+      metainfo = metainfoParser.fromJsonStream(metainfoJsonStream);
     }
 
-    Metainfo metainfo = new MetainfoParser().parse(metainfoStream);
-
+    if (metainfo == null) {
+      log.error("metainfo is unavailable at {}.", metainfoPath);
+      throw new FileNotFoundException("metainfo.xml/json is required in app package. " +
+                                      appPath);
+    }
     return metainfo;
   }
 

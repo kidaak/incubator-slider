@@ -17,10 +17,17 @@
    limitations under the License.
 -->
   <parent>
+<<<<<<< HEAD
     <groupId>org.apache.slider</groupId>
     <artifactId>slider</artifactId>
     <version>0.60.0-incubating</version>
     <relativePath>../../pom.xml</relativePath>
+=======
+    <groupId>org.apache.slider.packages</groupId>
+    <artifactId>slider-app-packages</artifactId>
+    <version>0.90.0-incubating-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
+>>>>>>> refs/remotes/apache/develop
   </parent>
   <modelVersion>4.0.0</modelVersion>
   <artifactId>slider-accumulo-app-package</artifactId>
@@ -38,6 +45,7 @@
     <slider.bin.dir>../../slider-assembly/target/slider-${project.version}-all/slider-${project.version}</slider.bin.dir>
     <test.app.pkg.dir>${project.build.directory}</test.app.pkg.dir>
     <test.app.resources.dir>${project.build.directory}/test-config</test.app.resources.dir>
+    <test.client.install.dir>${project.build.directory}/client-install-dir</test.client.install.dir>
     <!-- these properties are used in the default and the test appConfigs -->
     <hadoop.dir>/usr/lib/hadoop</hadoop.dir>
     <hdfs.dir>/usr/lib/hadoop-hdfs</hdfs.dir>
@@ -48,8 +56,8 @@
     <app.user>yarn</app.user>
     <app.user.group>hadoop</app.user.group>
     <!-- these are for accumulo processes -->
-    <accumulo.keytab></accumulo.keytab>
-    <accumulo.principal></accumulo.principal>
+    <accumulo.keytab />
+    <accumulo.principal />
     <!-- these are for the AM -->
     <accumulo.headless.keytab>${accumulo.keytab}</accumulo.headless.keytab>
     <accumulo.headless.principal>${accumulo.principal}</accumulo.headless.principal>
@@ -64,6 +72,10 @@
         <yarn.dir>/usr/hdp/current/hadoop-yarn-client</yarn.dir>
         <mapred.dir>/usr/hdp/current/hadoop-mapreduce-client</mapred.dir>
         <zk.dir>/usr/hdp/current/zookeeper-client</zk.dir>
+<<<<<<< HEAD
+=======
+        <slider.dir>/usr/hdp/current/slider-client</slider.dir>
+>>>>>>> refs/remotes/apache/develop
       </properties>
     </profile>
     <profile>
@@ -73,6 +85,7 @@
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-assembly-plugin</artifactId>
+            <version>${maven-assembly-plugin.version}</version>
             <configuration>
               <descriptor>src/assembly/accumulo.xml</descriptor>
               <appendAssemblyId>false</appendAssemblyId>
@@ -145,6 +158,7 @@
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-assembly-plugin</artifactId>
+            <version>${maven-assembly-plugin.version}</version>
             <configuration>
               <descriptor>src/assembly/accumulo.xml</descriptor>
               <appendAssemblyId>false</appendAssemblyId>
@@ -212,6 +226,8 @@
                 <test.app.pkg.file>${app.package.name}.zip</test.app.pkg.file>
                 <test.app.pkg.name>ACCUMULO</test.app.pkg.name>
                 <test.app.resources.dir>${test.app.resources.dir}</test.app.resources.dir>
+                <test.client.install.dir>${test.client.install.dir}</test.client.install.dir>
+                <test.client.home.dir>${test.client.install.dir}/accumulo-${accumulo.version}</test.client.home.dir>
               </systemPropertyVariables>
             </configuration>
           </plugin>
@@ -234,6 +250,8 @@
         <targetPath>${test.app.resources.dir}</targetPath>
         <includes>
           <include>appConfig-default.json</include>
+          <include>appConfig-ssl-default.json</include>
+          <include>clientInstallConfig-default.json</include>
         </includes>
       </resource>
     </resources>
@@ -241,6 +259,7 @@
     <plugins>
       <plugin>
         <artifactId>maven-compiler-plugin</artifactId>
+        <version>${maven-compiler-plugin.version}</version>
         <dependencies>
           <dependency>
             <groupId>org.codehaus.groovy</groupId>
@@ -280,6 +299,24 @@
     </dependency>
     <dependency>
       <groupId>org.apache.accumulo</groupId>
+      <artifactId>accumulo-proxy</artifactId>
+      <version>${accumulo.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.accumulo</groupId>
+      <artifactId>accumulo-examples-simple</artifactId>
+      <version>${accumulo.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.thrift</groupId>
+      <artifactId>libthrift</artifactId>
+      <version>0.9.1</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.accumulo</groupId>
       <artifactId>accumulo-test</artifactId>
       <scope>test</scope>
     </dependency>
@@ -307,6 +344,16 @@
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>commons-configuration</groupId>
+      <artifactId>commons-configuration</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.codehaus.jettison</groupId>
+      <artifactId>jettison</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

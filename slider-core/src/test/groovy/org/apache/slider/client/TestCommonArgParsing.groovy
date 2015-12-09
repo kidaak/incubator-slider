@@ -23,7 +23,6 @@ import groovy.transform.CompileStatic
 import groovy.util.logging.Slf4j
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hdfs.DFSConfigKeys
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.slider.api.ResourceKeys
 import org.apache.slider.api.RoleKeys
@@ -132,7 +131,7 @@ class TestCommonArgParsing implements SliderActions, Arguments {
     SliderUtils.verifyPrincipalSet(conf, YarnConfiguration.RM_PRINCIPAL);
     SliderUtils.verifyPrincipalSet(
         conf,
-        DFSConfigKeys.DFS_DATANODE_USER_NAME_KEY);
+        SliderXmlConfKeys.DFS_DATANODE_KERBEROS_PRINCIPAL_KEY);
 
   }
 
@@ -150,7 +149,7 @@ class TestCommonArgParsing implements SliderActions, Arguments {
     assert ca.clusterName == CLUSTERNAME
     assert conf.get(SliderXmlConfKeys.KEY_SLIDER_BASE_PATH) == "/projects/slider/clusters"
     SliderUtils.verifyPrincipalSet(conf, YarnConfiguration.RM_PRINCIPAL);
-    SliderUtils.verifyPrincipalSet(conf, DFSConfigKeys.DFS_DATANODE_USER_NAME_KEY);
+    SliderUtils.verifyPrincipalSet(conf, SliderXmlConfKeys.DFS_DATANODE_KERBEROS_PRINCIPAL_KEY);
 
   }
 
@@ -302,12 +301,22 @@ class TestCommonArgParsing implements SliderActions, Arguments {
    * build the list of base arguments for all operations
    * @return the base arguments
    */
-  private def baseArgs() {
+  private List<String> baseArgs() {
     return [
 
     ]
   }
 
+  /**
+   * Here to diagnose some problems with groovy concatenation on
+   * some groovy versions
+   * @throws Throwable
+   */
+  @Test
+  public void testListConcat() throws Throwable {
+    def l1 = ["a"] + baseArgs()
+    assert l1.size() == 1
+  }
 
   @Test
   public void testCreateWaitTime() throws Throwable {
@@ -466,10 +475,7 @@ class TestCommonArgParsing implements SliderActions, Arguments {
 
     def roleOpts = createArgs.compOptionMap
 
-    def clusterRoleMap = Maps.newHashMap([
-        "master":["cheese":"french"],
-        "worker":["env.CHEESE":"french"]
-    ])
+    def clusterRoleMap = createEnvMap()
     SliderUtils.applyCommandLineRoleOptsToRoleMap(clusterRoleMap, roleOpts);
 
     def masterOpts = clusterRoleMap["master"];
@@ -485,10 +491,8 @@ class TestCommonArgParsing implements SliderActions, Arguments {
 
     
     def roleOpts = createArgs.compOptionMap
-    Map<String, Map<String, String>> clusterRoleMap = Maps.newHashMap([
-        "master": ["cheese": "french"],
-        "worker": ["env.CHEESE": "french"]
-    ])
+
+    Map<String, Map<String, String>> clusterRoleMap = createEnvMap()
     SliderUtils.applyCommandLineRoleOptsToRoleMap(clusterRoleMap, roleOpts);
 
     def workerOpts = Maps.newHashMap(clusterRoleMap["worker"])
@@ -497,6 +501,23 @@ class TestCommonArgParsing implements SliderActions, Arguments {
     Map<String, String> envmap = SliderUtils.buildEnvMap(workerOpts);
     assert envmap["CHEESE"] == "stilton";
 
+  }
+
+  /**
+   * static compiler complaining about matching LinkedHashMap with Map,
+   * so some explicit creation here
+   * @return a map of maps
+   */
+  public Map<String, Map<String, String>> createEnvMap() {
+
+    Map<String, String> cheese = new HashMap<>()
+    cheese["cheese"]="french"
+    Map<String, String> envCheese = new HashMap<>()
+    envCheese["env.CHEESE"] = "french"
+    Map<String, Map<String, String>> envMap = new HashMap<>()
+    envMap["master"] = cheese
+    envMap["worker"] = envCheese
+    return envMap
   }
 
 

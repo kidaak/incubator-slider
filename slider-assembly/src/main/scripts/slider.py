@@ -21,12 +21,14 @@ import subprocess
 import time
 import platform
 from threading import Thread
+import getpass
 
 CONF = "conf"
 IS_WINDOWS = platform.system() == "Windows"
 LIB = "lib"
 
-ENV_KEYS = ["JAVA_HOME", "HADOOP_CONF_DIR", "SLIDER_CONF_DIR", "SLIDER_JVM_OPTS", "SLIDER_CLASSPATH_EXTRA"]
+ENV_KEYS = ["JAVA_HOME", "HADOOP_CONF_DIR", "SLIDER_HOME", "SLIDER_CONF_DIR", "SLIDER_JVM_OPTS", "SLIDER_CLASSPATH_EXTRA"]
+SLIDER_HOME = "SLIDER_HOME"
 SLIDER_CONF_DIR = "SLIDER_CONF_DIR"
 SLIDER_JVM_OPTS = "SLIDER_JVM_OPTS"
 SLIDER_CLASSPATH_EXTRA = "SLIDER_CLASSPATH_EXTRA"
@@ -40,6 +42,7 @@ DEFAULT_JVM_OPTS = "-Djava.net.preferIPv4Stack=true -Djava.awt.headless=true -Xm
 ON_POSIX = 'posix' in sys.builtin_module_names
 
 finished = False
+needPassword = False
 DEBUG = False
 
 """
@@ -162,6 +165,7 @@ def print_output(name, src, toStdErr):
   :return:
   """
 
+  global needPassword
   debug ("starting printer for %s" % name )
   line = ""
   while not finished:
@@ -169,6 +173,8 @@ def print_output(name, src, toStdErr):
     if done:
       out(toStdErr, line + "\n")
       flush(toStdErr)
+      if line.find("Enter password for") >= 0:
+        needPassword = True
       line = ""
   out(toStdErr, line)
   # closedown: read remainder of stream
@@ -182,6 +188,23 @@ def print_output(name, src, toStdErr):
   flush(toStdErr)
   src.close()
 
+def read_input(name, exe):
+  """
+  Read input from stdin and send to process
+  :param name:
+  :param process: process to send input to
+  :return:
+  """
+  global needPassword
+  debug ("starting reader for %s" % name )
+  while not finished:
+    if needPassword:
+      needPassword = False
+      if sys.stdin.isatty():
+        cred = getpass.getpass()
+      else:
+        cred = sys.stdin.readline().rstrip()
+      exe.stdin.write(cred + "\n")
 
 def runProcess(commandline):
   """
@@ -192,7 +215,7 @@ def runProcess(commandline):
   global finished
   debug ("Executing : %s" % commandline)
   exe = subprocess.Popen(commandline,
-                         stdin=None,
+                         stdin=subprocess.PIPE,
                          stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE,
                          shell=False,
@@ -205,6 +228,9 @@ def runProcess(commandline):
   t2 = Thread(target=print_output, args=("stderr", exe.stderr, True))
   t2.daemon = True 
   t2.start()
+  t3 = Thread(target=read_input, args=("stdin", exe))
+  t3.daemon = True
+  t3.start()
 
   debug("Waiting for completion")
   while exe.poll() is None:
@@ -214,6 +240,7 @@ def runProcess(commandline):
   finished = True
   t.join()
   t2.join()
+  t3.join()
   return exe.returncode
 
 
@@ -268,6 +295,7 @@ def main():
   """
   args = sys.argv[1:]
   slider_home = sliderDir()
+  os.environ[SLIDER_HOME] = slider_home
   libdir = dirMustExist(libDir(slider_home))
   confdir = dirMustExist(confDir(slider_home))
   executeEnvSh(confdir)

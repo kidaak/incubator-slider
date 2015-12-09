@@ -22,6 +22,11 @@ import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
 import org.apache.slider.api.ClusterDescription;
+import org.apache.slider.api.ClusterNode;
+import org.apache.slider.api.types.ApplicationLivenessInformation;
+import org.apache.slider.api.types.ComponentInformation;
+import org.apache.slider.api.types.NodeInformation;
+import org.apache.slider.api.types.RoleStatistics;
 import org.apache.slider.core.conf.AggregateConf;
 import org.apache.slider.core.conf.ConfTreeOperations;
 import org.apache.slider.core.exceptions.NoSuchNodeException;
@@ -36,11 +41,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Implementation of {@link StateAccessForProviders}, which means
+ * state access for providers, web UI and IPC/REST views.
+ */
 public class ProviderAppState implements StateAccessForProviders {
 
 
   private final Map<String, PublishedConfigSet> publishedConfigSets =
-      new ConcurrentHashMap<String, PublishedConfigSet>(5);
+      new ConcurrentHashMap<>(5);
   private final PublishedExportsSet publishedExportsSets = new PublishedExportsSet();
   private static final PatternValidator validator = new PatternValidator(
       RestPaths.PUBLISHED_CONFIGURATION_SET_REGEXP);
@@ -99,7 +108,7 @@ public class ProviderAppState implements StateAccessForProviders {
   public List<String> listConfigSets() {
 
     synchronized (publishedConfigSets) {
-      List<String> sets = new ArrayList<String>(publishedConfigSets.keySet());
+      List<String> sets = new ArrayList<>(publishedConfigSets.keySet());
       return sets;
     }
   }
@@ -111,13 +120,13 @@ public class ProviderAppState implements StateAccessForProviders {
 
 
   @Override
-  public Map<ContainerId, RoleInstance> getFailedNodes() {
-    return appState.getFailedNodes();
+  public Map<ContainerId, RoleInstance> getFailedContainers() {
+    return appState.getFailedContainers();
   }
 
   @Override
-  public Map<ContainerId, RoleInstance> getLiveNodes() {
-    return appState.getLiveNodes();
+  public Map<ContainerId, RoleInstance> getLiveContainers() {
+    return appState.getLiveContainers();
   }
 
   @Override
@@ -153,6 +162,11 @@ public class ProviderAppState implements StateAccessForProviders {
   @Override
   public AggregateConf getInstanceDefinitionSnapshot() {
     return appState.getInstanceDefinitionSnapshot();
+  }
+  
+  @Override
+  public AggregateConf getUnresolvedInstanceDefinition() {
+    return appState.getUnresolvedInstanceDefinition();
   }
 
   @Override
@@ -207,12 +221,88 @@ public class ProviderAppState implements StateAccessForProviders {
   }
 
   @Override
-  public void refreshClusterStatus() {
-    appState.refreshClusterStatus();
+  public ClusterDescription refreshClusterStatus() {
+    return appState.refreshClusterStatus();
   }
 
   @Override
   public List<RoleStatus> cloneRoleStatusList() {
     return appState.cloneRoleStatusList();
+  }
+
+  @Override
+  public ApplicationLivenessInformation getApplicationLivenessInformation() {
+    return appState.getApplicationLivenessInformation();
+  }
+
+  @Override
+  public Map<String, Integer> getLiveStatistics() {
+    return appState.getLiveStatistics();
+  }
+
+  @Override
+  public Map<String, ComponentInformation> getComponentInfoSnapshot() {
+    return appState.getComponentInfoSnapshot();
+  }
+
+  @Override
+  public Map<String, Map<String, ClusterNode>> getRoleClusterNodeMapping() {
+    return appState.createRoleToClusterNodeMap();
+  }
+
+  @Override
+  public List<RoleInstance> enumLiveInstancesInRole(String role) {
+    List<RoleInstance> nodes = new ArrayList<>();
+    Collection<RoleInstance> allRoleInstances = cloneLiveContainerInfoList();
+        getLiveContainers().values();
+    for (RoleInstance node : allRoleInstances) {
+      if (role.isEmpty() || role.equals(node.role)) {
+        nodes.add(node);
+      }
+    }
+    return nodes;
+  }
+
+  @Override
+  public List<RoleInstance> lookupRoleContainers(String component) {
+    RoleStatus roleStatus = lookupRoleStatus(component);
+    List<RoleInstance> ownedContainerList = cloneOwnedContainerList();
+    List<RoleInstance> matching = new ArrayList<>(ownedContainerList.size());
+    int roleId = roleStatus.getPriority();
+    for (RoleInstance instance : ownedContainerList) {
+      if (instance.roleId == roleId) {
+        matching.add(instance);
+      }
+    }
+    return matching;
+  }
+  
+  @Override
+  public ComponentInformation getComponentInformation(String component) {
+    RoleStatus roleStatus = lookupRoleStatus(component);
+    ComponentInformation info = roleStatus.serialize();
+    List<RoleInstance> containers = lookupRoleContainers(component);
+    info.containers = new ArrayList<>(containers.size());
+    for (RoleInstance container : containers) {
+      info.containers.add(container.id);
+    }
+    return info;
+  }
+
+  @Override
+  public Map<String, NodeInformation> getNodeInformationSnapshot() {
+    return appState.getRoleHistory()
+      .getNodeInformationSnapshot(appState.buildNamingMap());
+  }
+
+  @Override
+  public NodeInformation getNodeInformation(String hostname) {
+    return appState.getRoleHistory()
+      .getNodeInformation(hostname, appState.buildNamingMap());
+  }
+
+  @Override
+  public RoleStatistics getRoleStatistics() {
+    return appState.getRoleStatistics();
   }
 }

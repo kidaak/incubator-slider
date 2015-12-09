@@ -17,7 +17,7 @@
  */
 
 package org.apache.slider.api;
-
+import static org.apache.slider.api.ResourceKeys.COMPONENT_INSTANCES;
 /**
  * Contains status and statistics keys
  */
@@ -27,8 +27,12 @@ public interface StatusKeys {
   String STATISTICS_CONTAINERS_COMPLETED = "containers.completed";
   String STATISTICS_CONTAINERS_DESIRED = "containers.desired";
   String STATISTICS_CONTAINERS_FAILED = "containers.failed";
+  String STATISTICS_CONTAINERS_FAILED_RECENTLY = "containers.failed.recently";
+  String STATISTICS_CONTAINERS_FAILED_NODE = "containers.failed.node";
+  String STATISTICS_CONTAINERS_PREEMPTED = "containers.failed.preempted";
   String STATISTICS_CONTAINERS_LIVE = "containers.live";
   String STATISTICS_CONTAINERS_REQUESTED = "containers.requested";
+  String STATISTICS_CONTAINERS_ANTI_AFFINE_PENDING = "containers.anti-affine.pending";
   String STATISTICS_CONTAINERS_STARTED = "containers.start.started";
   String STATISTICS_CONTAINERS_START_FAILED =
       "containers.start.failed";
@@ -71,4 +75,43 @@ public interface StatusKeys {
   String INFO_AM_AGENT_OPS_PORT = "info.am.agent.ops.port";
   String INFO_AM_AGENT_OPS_URL = "info.am.agent.ops.url";
   String INFO_AM_AGENT_STATUS_URL = "info.am.agent.status.url";
+
+      /**
+       * info: #of instances of a component requested: {@value}
+       *
+       */
+  String COMPONENT_INSTANCES_ACTUAL = COMPONENT_INSTANCES + ".actual";
+
+  /**
+   * info: #of instances of a component requested: {@value}
+   *
+   */
+  String COMPONENT_INSTANCES_REQUESTING = COMPONENT_INSTANCES + ".requesting";
+
+  /**
+   * info: #of instances of a component being released: {@value}
+   *
+   */
+  String COMPONENT_INSTANCES_RELEASING = COMPONENT_INSTANCES + ".releasing";
+
+  /**
+   * info: #of instances of a component failed: {@value}
+   *
+   */
+  String COMPONENT_INSTANCES_FAILED = COMPONENT_INSTANCES + ".failed";
+
+  /**
+   * info: #of instances of a component started: {@value}
+   *
+   */
+  String COMPONENT_INSTANCES_STARTED = COMPONENT_INSTANCES + ".started";
+
+
+  /**
+   * info: #of instances of a component completed: {@value}
+   *
+   */
+  String COMPONENT_INSTANCES_COMPLETED = COMPONENT_INSTANCES + ".completed";
+
+
 }
